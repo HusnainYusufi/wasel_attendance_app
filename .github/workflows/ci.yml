@@ -87,7 +87,12 @@ jobs:
       JWT_ACCESS_SECRET: ci-access-secret-value-at-least-32-chars-long
       JWT_REFRESH_SECRET: ci-refresh-secret-value-at-least-32-chars-long
       CORS_ORIGINS: http://localhost:5173
-      LOG_LEVEL: silent
+      # LOG_LEVEL is deliberately NOT set here. The test harness applies its own
+      # defaults only for variables the environment does not already provide, so
+      # exporting `silent` would win — and several integration tests assert on log
+      # output (that secrets are redacted, that the exception filter records the
+      # real error). Silencing the logger makes those tests fail with an empty
+      # string, which reads like a redaction bug rather than a CI misconfiguration.
 
     steps:
       - uses: actions/checkout@v4
