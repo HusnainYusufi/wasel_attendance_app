@@ -1,14 +1,24 @@
 # Wasel Attendance — production stack.
 #
-#   caddy     :80/:443  automatic HTTPS, the only thing exposed to the internet
-#   api       :3000     internal only
-#   postgres  :5432     internal only, on a named volume
+#   postgres  never published; reachable only from the API container
+#   api       internal; published to loopback only when behind an existing proxy
+#   caddy     :80/:443, opt-in via `--profile edge`
 #
-# Postgres is deliberately NOT published to the host. A database reachable from
-# the internet is the single most common way a small deployment is breached, and
-# nothing outside this network needs it.
+# Two deployment shapes:
 #
-#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#   A server of its own — Caddy terminates TLS and gets its own certificates:
+#     docker compose -f docker-compose.prod.yml --env-file .env.production \
+#       --profile edge up -d
+#
+#   A server already running nginx/Traefik — the API binds to loopback and the
+#   existing proxy fronts it:
+#     docker compose -f docker-compose.prod.yml \
+#       -f deploy/docker-compose.behind-proxy.yml \
+#       --env-file .env.production up -d
+#
+# Postgres is deliberately NOT published in either shape. A database reachable
+# from the internet is the single most common way a small deployment is
+# breached, and nothing outside this network needs it.
 #
 # Migrations run as a one-shot service that must exit 0 before the API starts, so
 # a deploy can never serve traffic against a schema it was not built for.
@@ -75,17 +85,25 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-info}
       LOG_PRETTY: 'false'
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
-      # Exactly one proxy (Caddy) sits in front. Never raise this above the real
-      # hop count: each extra hop lets a client forge its own IP in
-      # X-Forwarded-For, poisoning the audit log and defeating per-IP limits.
-      TRUST_PROXY_HOPS: 1
+      # Exactly one proxy sits in front — Caddy, or the host's nginx. Never raise
+      # this above the real hop count: each extra hop lets a client forge its own
+      # IP in X-Forwarded-For, poisoning the audit log and defeating per-IP limits.
+      TRUST_PROXY_HOPS: ${TRUST_PROXY_HOPS:-1}
       RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
       RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
     networks: [internal, web]
-    # No `ports:` — only Caddy reaches this.
+    # No `ports:` here on purpose. The edge profile reaches this over the compose
+    # network; behind an existing proxy, the overlay publishes it to 127.0.0.1
+    # only. Neither shape exposes it on the public interface.
 
+  # Opt-in edge. Started only with `--profile edge`, because a server that
+  # already terminates TLS (nginx, Traefik, a cloud load balancer) owns :80/:443
+  # and a second claimant would either fail to bind or take the existing sites
+  # down. Behind an existing proxy, use deploy/docker-compose.behind-proxy.yml
+  # instead and leave this out.
   caddy:
+    profiles: ['edge']
     image: caddy:2-alpine
     restart: unless-stopped
     depends_on: [api]

@@ -1,0 +1,18 @@
+# Overlay for a server that already terminates TLS.
+#
+#   docker compose -f docker-compose.prod.yml \
+#                  -f deploy/docker-compose.behind-proxy.yml \
+#                  --env-file .env.production up -d
+#
+# Publishes the API on the loopback interface only, for an existing nginx or
+# Traefik to proxy to. Binding to 127.0.0.1 rather than 0.0.0.0 matters: the
+# latter would expose the API directly on the public interface, bypassing the
+# proxy's TLS, rate limits and access logs — and Docker writes its own iptables
+# rules, so a host firewall would not necessarily stop it.
+#
+# Caddy is simply never started here: it lives behind the `edge` profile.
+
+services:
+  api:
+    ports:
+      - '127.0.0.1:${API_BIND_PORT:-3420}:3000'
