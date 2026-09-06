@@ -19,4 +19,6 @@ for (const [dir, type] of [
   writeFileSync(join(dist, dir, 'package.json'), `${JSON.stringify({ type }, null, 2)}\n`);
 }
 
-console.log('finalize-dist: wrote dist/cjs/package.json (commonjs) and dist/esm/package.json (module)');
+console.log(
+  'finalize-dist: wrote dist/cjs/package.json (commonjs) and dist/esm/package.json (module)',
+);
