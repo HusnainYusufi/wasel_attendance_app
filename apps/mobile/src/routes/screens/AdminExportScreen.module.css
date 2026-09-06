@@ -32,6 +32,91 @@
 
 /* Preview -------------------------------------------------------------------- */
 
+/**
+ * The column list.
+ *
+ * Chips rather than a table or a bulleted list, for one reason: the detailed
+ * sheet has sixteen columns and a 360 px screen has room for about four words a
+ * line. Wrapping chips turn that into five compact rows the eye can scan for a
+ * name, where sixteen full-width list items would be a scroll of their own and
+ * would push the range summary — the other half of the preview — off the screen
+ * entirely.
+ *
+ * Numbered, because "column 5" is how a spreadsheet is talked about once it has
+ * been opened, and the number is what makes this list usable as a key rather than
+ * merely as reassurance.
+ */
+.columns {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.columnsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.columnsTitle {
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+}
+
+.columnsCount {
+  flex: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.columnsPurpose {
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+
+.columnList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.column {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  /* `min-width: 0` so a long header wraps inside its own chip instead of
+     widening the row and pushing the card into a horizontal scroll. */
+  min-width: 0;
+  padding: var(--space-1) var(--space-3);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-sunken);
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-snug);
+  color: var(--color-text);
+}
+
+.columnIndex {
+  flex: none;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-semibold);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-subtle);
+}
+
+.columnsNote {
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-normal);
+  color: var(--color-text-subtle);
+}
+
 .summary {
   display: flex;
   flex-direction: column;

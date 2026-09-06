@@ -24,9 +24,12 @@ import {
 } from '../attendance.js';
 import { PunchOutcome, PunchType } from '../constants.js';
 import { reportRowSchema } from '../admin.js';
+import { AttendanceSource } from '../attendance-entry.js';
 import {
   createSiteRequestSchema,
+  EXPORT_VARIANT_COLUMNS,
   exportQuerySchema,
+  ExportVariant,
   updateOrganizationRequestSchema,
   updateSiteRequestSchema,
   updateUserRequestSchema,
@@ -407,6 +410,67 @@ describe('admin schemas', () => {
       false,
     );
   });
+
+  /**
+   * The variant is a second axis on one route, so every combination has to parse
+   * — and the *absence* of the parameter has to keep meaning what it has always
+   * meant, because a saved link or a script written before it existed is asking
+   * for the detailed sheet whether it says so or not.
+   */
+  it('defaults the export variant to the detailed sheet', () => {
+    expect(exportQuerySchema.parse({ from: '2026-03-01', to: '2026-03-31' }).variant).toBe(
+      'detailed',
+    );
+  });
+
+  it('accepts every variant and format combination', () => {
+    for (const variant of ['detailed', 'minified']) {
+      for (const format of ['csv', 'xlsx']) {
+        const parsed = exportQuerySchema.parse({
+          from: '2026-03-01',
+          to: '2026-03-31',
+          format,
+          variant,
+        });
+        expect([parsed.variant, parsed.format]).toEqual([variant, format]);
+      }
+    }
+  });
+
+  it('rejects a variant it does not produce', () => {
+    expect(
+      exportQuerySchema.safeParse({ from: '2026-03-01', to: '2026-03-31', variant: 'summary' })
+        .success,
+    ).toBe(false);
+  });
+
+  /**
+   * The picker in the client is built from this list, so an empty or duplicated
+   * one would advertise a sheet nobody can get.
+   */
+  it('publishes a distinct, non-empty column list for each variant', () => {
+    for (const variant of Object.values(ExportVariant)) {
+      const columns = EXPORT_VARIANT_COLUMNS[variant];
+      expect(columns.length).toBeGreaterThan(0);
+      expect(new Set(columns).size).toBe(columns.length);
+    }
+    // The minified sheet is the one whose whole point is being shorter.
+    expect(EXPORT_VARIANT_COLUMNS[ExportVariant.MINIFIED].length).toBeLessThan(
+      EXPORT_VARIANT_COLUMNS[ExportVariant.DETAILED].length,
+    );
+  });
+
+  it('promises the four fields the minified sheet was asked for, plus the day they fall on', () => {
+    // Without a work date a column of check-in times is unreadable across a
+    // range: every row says 08:15 and nothing says which morning.
+    expect(EXPORT_VARIANT_COLUMNS[ExportVariant.MINIFIED]).toEqual([
+      'Work date',
+      'Employee',
+      'Check-in',
+      'Check-out',
+      'Total hours',
+    ]);
+  });
 });
 
 describe('geofence as a record rather than a gate', () => {
@@ -490,6 +554,9 @@ describe('reportRowSchema', () => {
   const ROW = {
     id: '33333333-3333-4333-8333-333333333333',
     workDate: '2026-03-01',
+    source: AttendanceSource.PUNCH,
+    enteredByName: null,
+    note: null,
     userId: '44444444-4444-4444-8444-444444444444',
     userFullName: 'Sara Haddad',
     userEmail: 'sara@wasel.test',
@@ -514,6 +581,29 @@ describe('reportRowSchema', () => {
     expect(parsed.checkInDistanceM).toBe(791_043.2);
     expect(parsed.checkInAccuracyM).toBe(2400);
     expect(parsed.outOfRange).toEqual([PunchType.CHECK_IN]);
+  });
+
+  it('carries provenance on every row, so a punch is never identified by absence', () => {
+    // A hand-entered day and a punched one must be distinguishable in the sheet
+    // payroll is run from. `source` says which, on both kinds of row — a field
+    // that were only present on manual rows would make "missing" ambiguous
+    // between "punched" and "an older record from before this existed".
+    expect(reportRowSchema.parse(ROW).source).toBe(AttendanceSource.PUNCH);
+
+    const manual = reportRowSchema.parse({
+      ...ROW,
+      source: AttendanceSource.MANUAL,
+      enteredByName: 'Wasel Administrator',
+      note: 'Phone battery died on the site visit',
+    });
+    expect(manual.source).toBe(AttendanceSource.MANUAL);
+    expect(manual.enteredByName).toBe('Wasel Administrator');
+    expect(manual.note).toBe('Phone battery died on the site visit');
+  });
+
+  it('rejects a row with no provenance at all', () => {
+    const { source: _source, ...withoutSource } = ROW;
+    expect(reportRowSchema.safeParse(withoutSource).success).toBe(false);
   });
 
   it('allows a row with no site at all', () => {

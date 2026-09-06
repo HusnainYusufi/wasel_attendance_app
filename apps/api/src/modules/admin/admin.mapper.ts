@@ -1,6 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { PunchType } from '@wasel/contracts';
 import type {
+  AttendanceSource,
   AttendanceStatus,
   OrganizationDto,
   ReportRow,
@@ -76,7 +77,10 @@ export const REPORT_RECORD_SELECT = {
   status: true,
   workedMinutes: true,
   lateMinutes: true,
+  source: true,
+  note: true,
   user: { select: { fullName: true, email: true, employeeCode: true } },
+  enteredBy: { select: { fullName: true } },
   // `radiusMeters` rides along on both joins so the report can say *whether* a
   // punch was outside its fence, not merely how far away it was. The comparison
   // has to happen somewhere, and doing it once on the server is what stops the
@@ -137,7 +141,13 @@ export type ReportRecord = {
   status: AttendanceStatus;
   workedMinutes: number | null;
   lateMinutes: number;
+  /** PUNCH when the employee recorded it; MANUAL when an administrator did. */
+  source: AttendanceSource;
+  /** Why it was entered by hand. Null for a real punch. */
+  note: string | null;
   user: { fullName: string; email: string; employeeCode: string | null };
+  /** The administrator who entered or last corrected it. Null for a real punch. */
+  enteredBy: { fullName: string } | null;
   /** Null when the tenant had no site to measure this punch against. */
   checkInSite: ReportSite | null;
   checkOutSite: ReportSite | null;
@@ -207,6 +217,9 @@ export function toReportRow(row: ReportRecord): ReportRow {
   return {
     id: row.id,
     workDate: toIsoDate(row.workDate),
+    source: row.source,
+    enteredByName: row.enteredBy?.fullName ?? null,
+    note: row.note,
     userId: row.userId,
     userFullName: row.user.fullName,
     userEmail: row.user.email,

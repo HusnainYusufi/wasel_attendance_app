@@ -40,7 +40,8 @@ describe('admin organization', () => {
         name: 'Wasel',
         timezone: 'Asia/Riyadh',
         workdayStart: '09:00',
-        workdayEnd: '17:00',
+        // 09:00-18:00 is the shipped default: a nine-to-six office day.
+        workdayEnd: '18:00',
         // Local midnight: a new tenant's business day is its calendar day, which
         // is what every organization created before the setting existed did.
         dayStartsAt: '00:00',

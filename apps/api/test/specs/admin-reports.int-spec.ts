@@ -311,6 +311,11 @@ describe('admin attendance report and export', () => {
         'Check-out distance from site',
         'Check-out GPS accuracy (radius)',
         'Outside geofence',
+        // Provenance sits beside the geofence flag: both answer "how far should
+        // I trust this row", and a payroll reader must be able to see which days
+        // were typed in rather than punched.
+        'Entered by hand',
+        'Reason for manual entry',
         'Status',
         'Worked minutes',
         'Late minutes',

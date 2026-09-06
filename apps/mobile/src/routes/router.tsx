@@ -23,6 +23,7 @@ const HistoryScreen = lazy(() => import('./screens/HistoryScreen'));
 const AdminScreen = lazy(() => import('./screens/AdminScreen'));
 const AdminUsersScreen = lazy(() => import('./screens/AdminUsersScreen'));
 const AdminSitesScreen = lazy(() => import('./screens/AdminSitesScreen'));
+const AdminAttendanceScreen = lazy(() => import('./screens/AdminAttendanceScreen'));
 const AdminExportScreen = lazy(() => import('./screens/AdminExportScreen'));
 const NotFoundScreen = lazy(() => import('./screens/NotFoundScreen'));
 
@@ -69,6 +70,7 @@ export const routes: RouteObject[] = [
               { path: paths.admin, element: <AdminScreen /> },
               { path: paths.adminUsers, element: <AdminUsersScreen /> },
               { path: paths.adminSites, element: <AdminSitesScreen /> },
+              { path: paths.adminAttendance, element: <AdminAttendanceScreen /> },
               { path: paths.adminExport, element: <AdminExportScreen /> },
             ],
           },

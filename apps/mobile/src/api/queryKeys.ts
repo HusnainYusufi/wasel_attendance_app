@@ -1,6 +1,7 @@
 import type {
   AttendanceHistoryQuery,
   AttendanceReportQuery,
+  ListAttendanceEntriesQuery,
   ListUsersQuery,
 } from '@wasel/contracts';
 
@@ -13,6 +14,22 @@ import type {
  */
 export const queryKeys = {
   session: ['session'] as const,
+
+  profile: {
+    all: ['profile'] as const,
+    self: () => [...queryKeys.profile.all, 'self'] as const,
+    /**
+     * Keyed on `updatedAt` as well as the user.
+     *
+     * That is what makes a replaced picture appear immediately: the new profile
+     * carries a new timestamp, which is a different key, so the old blob is not
+     * reused. Without it the cache would happily serve the previous image until
+     * its `staleTime` expired — the classic "I changed my photo and nothing
+     * happened" bug.
+     */
+    avatar: (userId: string, updatedAt: string) =>
+      [...queryKeys.profile.all, 'avatar', userId, updatedAt] as const,
+  },
 
   attendance: {
     all: ['attendance'] as const,
@@ -29,5 +46,7 @@ export const queryKeys = {
     organization: () => [...queryKeys.admin.all, 'organization'] as const,
     report: (query: Partial<AttendanceReportQuery>) =>
       [...queryKeys.admin.all, 'report', query] as const,
+    attendanceEntries: (query: Partial<ListAttendanceEntriesQuery>) =>
+      [...queryKeys.admin.all, 'attendance-entries', query] as const,
   },
 } as const;

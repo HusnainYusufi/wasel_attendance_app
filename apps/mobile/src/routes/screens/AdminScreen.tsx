@@ -7,6 +7,7 @@ import { LoadFailure } from '../../components/LoadFailure';
 import { StatGrid, StatTile } from '../../components/StatTile';
 import {
   Card,
+  ClockIcon,
   DownloadIcon,
   List,
   ListItem,
@@ -34,6 +35,12 @@ const NAV_ROWS = [
     icon: <MapPinIcon size="1.2rem" />,
     title: 'Sites',
     description: 'Geofences for check-in',
+  },
+  {
+    to: paths.adminAttendance,
+    icon: <ClockIcon size="1.2rem" />,
+    title: 'Attendance',
+    description: 'Record or correct a day by hand',
   },
   {
     to: paths.adminExport,

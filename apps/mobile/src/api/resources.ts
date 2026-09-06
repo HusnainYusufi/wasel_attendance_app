@@ -1,25 +1,32 @@
 import type {
   AdminOverview,
+  AttendanceEntryDto,
   AttendanceHistoryQuery,
   AttendanceRecordDto,
   AttendanceReportQuery,
   AttendanceStatusDto,
   AuthUser,
+  AvatarSummary,
   ChangePasswordRequest,
+  CreateAttendanceEntryRequest,
   CreateSiteRequest,
   CreateUserRequest,
   ExportQuery,
+  ListAttendanceEntriesQuery,
   ListUsersQuery,
   LoginRequest,
   LoginResponse,
   OrganizationDto,
   Paginated,
+  ProfileDto,
   PunchRequest,
   PunchResponse,
   ReportRow,
   ReportSummary,
   SiteDto,
+  UpdateAttendanceEntryRequest,
   UpdateOrganizationRequest,
+  UpdateProfileRequest,
   UpdateSiteRequest,
   UpdateUserRequest,
   UserDto,
@@ -57,6 +64,44 @@ export const authApi = {
 
   changePassword: (body: ChangePasswordRequest) =>
     apiClient.request<void>(endpoints.auth.changePassword, { method: 'POST', body }),
+};
+
+export const profileApi = {
+  get: (signal?: AbortSignal) => apiClient.request<ProfileDto>(endpoints.profile.self, { signal }),
+
+  /**
+   * Changing `email` also requires `currentPassword`, and revokes every session
+   * including this one — the caller must sign out afterwards. Changing only
+   * `fullName` does neither.
+   */
+  update: (body: UpdateProfileRequest) =>
+    apiClient.request<ProfileDto>(endpoints.profile.self, { method: 'PATCH', body }),
+
+  /**
+   * Uploads the picture as the raw request body.
+   *
+   * The `Content-Type` is set explicitly rather than left to the `Blob`: the
+   * server checks the declared type against the file's magic bytes and refuses a
+   * mismatch, so an empty or guessed type is a rejected upload.
+   */
+  uploadAvatar: (image: Blob, contentType: string) =>
+    apiClient.request<AvatarSummary>(endpoints.profile.avatar, {
+      method: 'PUT',
+      body: image,
+      headers: { 'Content-Type': contentType },
+    }),
+
+  removeAvatar: () => apiClient.request<void>(endpoints.profile.avatar, { method: 'DELETE' }),
+
+  /**
+   * A user's picture, as bytes.
+   *
+   * Goes through the API client rather than an `<img src>` because the route is
+   * authenticated: an `<img>` cannot carry a bearer token, and pointing one at
+   * this URL would produce a 401 rendered as a broken image.
+   */
+  avatarBlob: (userId: string, signal?: AbortSignal): Promise<BinaryResponse> =>
+    apiClient.requestBinary(endpoints.profile.userAvatar(userId), { signal }),
 };
 
 export const attendanceApi = {
@@ -127,6 +172,36 @@ export const adminApi = {
 
   updateOrganization: (body: UpdateOrganizationRequest) =>
     apiClient.request<OrganizationDto>(endpoints.admin.organization, { method: 'PATCH', body }),
+
+  /**
+   * Attendance in a date range, every row carrying how it came to exist.
+   *
+   * Distinct from {@link adminApi.report}: that endpoint answers "what did this
+   * month look like", this one answers "which of these days did a human type
+   * in, and who". Filter with `source: 'MANUAL'` for the second question alone.
+   */
+  listAttendanceEntries: (query: Partial<ListAttendanceEntriesQuery>, signal?: AbortSignal) =>
+    apiClient.request<Paginated<AttendanceEntryDto>>(endpoints.admin.attendanceEntries, {
+      query: query as QueryParams,
+      signal,
+    }),
+
+  /** Times are local wall clocks in the organization timezone; the server resolves them. */
+  createAttendanceEntry: (body: CreateAttendanceEntryRequest) =>
+    apiClient.request<AttendanceEntryDto>(endpoints.admin.attendanceEntries, {
+      method: 'POST',
+      body,
+    }),
+
+  /** Flips the record to `MANUAL` and stamps the caller on it, punched or not. */
+  updateAttendanceEntry: (id: string, body: UpdateAttendanceEntryRequest) =>
+    apiClient.request<AttendanceEntryDto>(endpoints.admin.attendanceEntry(id), {
+      method: 'PATCH',
+      body,
+    }),
+
+  deleteAttendanceEntry: (id: string) =>
+    apiClient.request<void>(endpoints.admin.attendanceEntry(id), { method: 'DELETE' }),
 
   report: (query: Partial<AttendanceReportQuery>, signal?: AbortSignal) =>
     apiClient.request<AttendanceReport>(endpoints.admin.report, {

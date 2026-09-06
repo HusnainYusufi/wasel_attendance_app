@@ -1,4 +1,5 @@
 import {
+  AttendanceSource,
   AttendanceStatus,
   ErrorCode,
   PunchOutcome,
@@ -100,6 +101,12 @@ function recordRow(overrides: Partial<AttendanceRecordRow> = {}): AttendanceReco
     checkOutLatitude: null,
     checkOutLongitude: null,
     checkOutAccuracyM: null,
+    // Provenance. Present on every row so that a hand-entered record is never
+    // identified by the *absence* of a field — a punched record says PUNCH.
+    source: AttendanceSource.PUNCH,
+    enteredById: null,
+    enteredAt: null,
+    note: null,
     checkOutDistanceM: null,
     status: AttendanceStatus.INCOMPLETE,
     workedMinutes: null,

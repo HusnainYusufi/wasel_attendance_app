@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuditService } from '../auth/audit.service.js';
+import { AdminAttendanceEntryController } from './admin-attendance-entry.controller.js';
+import { AdminAttendanceEntryService } from './admin-attendance-entry.service.js';
 import { AdminAuditService } from './admin-audit.service.js';
 import { AdminOrganizationController } from './admin-organization.controller.js';
 import { AdminOrganizationService } from './admin-organization.service.js';
@@ -15,7 +17,14 @@ import { AttendanceExportService } from './attendance-export.service.js';
 
 /**
  * The admin panel: employees, sites, tenant settings, the dashboard, the
- * attendance report and its export.
+ * attendance report and its export, and manual attendance entry.
+ *
+ * `AdminAttendanceEntryService` is the one provider here that *writes*
+ * `attendance_records`, which the attendance module otherwise owns outright. It
+ * reuses that module's helpers rather than importing the module: everything it
+ * needs is a pure function over a work date, and depending on `AttendanceModule`
+ * would drag `PunchRefusalFilter` and the punch controller into a module that
+ * has no use for either.
  *
  * It imports nothing: `PrismaModule`, `ClockModule` and `AuthModule` are all
  * `@Global()`, so `PasswordService` — which this module reuses rather than
@@ -34,6 +43,7 @@ import { AttendanceExportService } from './attendance-export.service.js';
     AdminSitesController,
     AdminOrganizationController,
     AdminReportsController,
+    AdminAttendanceEntryController,
   ],
   providers: [
     AuditService,
@@ -44,6 +54,7 @@ import { AttendanceExportService } from './attendance-export.service.js';
     AdminOrganizationService,
     AdminReportsService,
     AttendanceExportService,
+    AdminAttendanceEntryService,
   ],
 })
 export class AdminModule {}

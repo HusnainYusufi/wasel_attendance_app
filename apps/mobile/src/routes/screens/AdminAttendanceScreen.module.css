@@ -1,0 +1,238 @@
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/**
+ * The two date bounds are one control, so they sit on one row. Below 22rem a
+ * 360px screen minus the gutters can no longer hold two usable date inputs
+ * side by side, and a cramped `dd/mm/yyyy` is worse than a stacked pair.
+ */
+.filterPair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 22rem) {
+  .filterPair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.resultRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+/**
+ * The row.
+ *
+ * Hand-built rather than a `ListItem` for one reason: the provenance line has to
+ * wrap, and the list item clips its description to a single line. Everything
+ * else here — the tap target, the hover and active states, the inset focus ring,
+ * the divider between rows — reproduces that component's behaviour rather than
+ * inventing a second one.
+ */
+.rows {
+  display: flex;
+  flex-direction: column;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Clipped to the card it fills, so the first and last rows' backgrounds — and
+     the manual stripe, which is visible at rest rather than only on hover —
+     follow the rounded corners instead of squaring them off. */
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  inline-size: 100%;
+  min-block-size: var(--size-tap-min);
+  padding-block: var(--space-3);
+  padding-inline: var(--space-4);
+  text-align: start;
+  color: var(--color-text);
+  background-color: transparent;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-standard);
+}
+
+/**
+ * A hand-entered day, marked before a single word is read.
+ *
+ * The stripe costs three pixels of a 360px row, which is why it can exist
+ * alongside the badge rather than instead of it: colour alone is not a label —
+ * the badge still carries the words "By hand" for anyone who cannot see amber.
+ */
+.manualRow {
+  box-shadow: inset var(--border-width-strong) 0 0 var(--color-warning);
+}
+
+.row:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.row:active {
+  background-color: var(--color-bg-active);
+}
+
+/* Inset, so the card that wraps the list cannot clip the ring. */
+.row:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 var(--focus-ring-width) var(--color-focus-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Aligned with the text column, the way a native list draws its separators. */
+.rows > li + li > .row::before {
+  content: '';
+  position: absolute;
+  inset-inline: calc(var(--space-4) + 2.5rem + var(--space-3)) 0;
+  inset-block-start: 0;
+  block-size: var(--border-width);
+  background-color: var(--color-border-subtle);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+/** The leading date block, matching the employee's own history rows. */
+.date {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  inline-size: 2.5rem;
+  padding-block: var(--space-2);
+  border-radius: var(--radius-md);
+  background-color: var(--color-bg-sunken);
+}
+
+.dateDay {
+  font-size: var(--font-size-base);
+  line-height: var(--leading-none);
+  font-weight: var(--weight-bold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.dateWeekday {
+  font-size: var(--font-size-2xs);
+  line-height: var(--leading-snug);
+  color: var(--color-text-subtle);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wide);
+}
+
+/**
+ * The name, and the badge that says a human typed this day in.
+ *
+ * `flex-wrap` with a shrinkable name is what keeps both readable at 360px: a
+ * short name keeps the badge on its line, and a long one pushes the badge onto
+ * its own rather than being ground down to "Field …". The badge never shrinks —
+ * a truncated "By ha…" would be worse than no badge at all.
+ */
+.rowTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  min-width: 0;
+  font-size: var(--font-size-base);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text);
+}
+
+.name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.times {
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-snug);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/** Who typed the day in. One line: a name that does not fit is still a name. */
+.enteredBy {
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-snug);
+  color: var(--color-text-subtle);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/**
+ * Why it was typed in.
+ *
+ * Given its own line and allowed to wrap to two: the reason is the whole point
+ * of a manual row, and clipping "Forgot to check out after the site visit" to
+ * "Forgot to…" would leave the badge above it pointing at nothing.
+ */
+.provenance {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-snug);
+  color: var(--color-text-subtle);
+}
+
+.worked {
+  align-self: center;
+  flex: none;
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.pagerLabel {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.skeletonRows {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

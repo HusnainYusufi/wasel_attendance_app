@@ -9,6 +9,12 @@
  * in the default pipeline does that, so the APK built fine, installed fine, and
  * then could not so much as ask for GPS: the one feature the product exists for.
  *
+ * That precedent is why POST_NOTIFICATIONS is declared here too. Today
+ * `@capacitor/local-notifications` happens to declare it in its own manifest and
+ * the merger folds it in — but "happens to" is exactly the assumption that cost
+ * this project a GPS-less APK once already, and a plugin bump is all it takes to
+ * change. Declaring it in the app costs a merged duplicate and nothing else.
+ *
  * Idempotent, and fails loudly rather than silently producing a crippled APK.
  */
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -26,6 +32,7 @@ const manifestPath = resolve(
 const REQUIRED_PERMISSIONS = [
   ['android.permission.ACCESS_COARSE_LOCATION', 'geofence check-in (coarse fallback)'],
   ['android.permission.ACCESS_FINE_LOCATION', 'geofence check-in (GPS accuracy)'],
+  ['android.permission.POST_NOTIFICATIONS', 'check-out reminders (Android 13+ runtime grant)'],
 ];
 
 /**

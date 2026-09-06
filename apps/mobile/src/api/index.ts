@@ -18,4 +18,4 @@ export {
 export { ApiClient, type BinaryResponse, type RequestOptions } from './http';
 export { queryKeys } from './queryKeys';
 export { createQueryClient } from './queryClient';
-export { adminApi, attendanceApi, authApi, type AttendanceReport } from './resources';
+export { adminApi, attendanceApi, authApi, profileApi, type AttendanceReport } from './resources';

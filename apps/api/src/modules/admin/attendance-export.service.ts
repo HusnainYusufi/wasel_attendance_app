@@ -44,6 +44,14 @@ const ABORT_REASON = {
 /**
  * `GET /admin/reports/export` — the attendance sheet.
  *
+ * Two axes, one route: `format` picks CSV or XLSX, `variant` picks the detailed
+ * sheet or the minified payroll one. Everything below is common to all four
+ * combinations — the tenancy predicate, the keyset stream, the pre-flight row
+ * check, the audit pair, the stall deadline — which is the reason the variant is
+ * a parameter rather than a second endpoint: a copy of this handler would be a
+ * copy of every property it is careful about, and the copy is the one that would
+ * quietly lose the backpressure.
+ *
  * The response is streamed rather than assembled: rows arrive from the database
  * in keyset batches, are rendered into the chosen format, and are handed to the
  * socket immediately. Nothing accumulates but the running totals and the set of
@@ -111,7 +119,13 @@ export class AttendanceExportService {
     const first = await batches.next();
 
     const generatedAt = this.clock.now();
-    const filename = exportFilename(context.organizationSlug, query.from, query.to, query.format);
+    const filename = exportFilename(
+      context.organizationSlug,
+      query.from,
+      query.to,
+      query.format,
+      query.variant,
+    );
 
     await this.audit.record({
       organizationId: auth.organizationId,
@@ -136,6 +150,7 @@ export class AttendanceExportService {
       range,
       generatedAt,
       timezoneChanges,
+      variant: query.variant,
     };
     const sink: ExportSink =
       query.format === ExportFormat.CSV ? createCsvSink(options) : createXlsxSink(options);
@@ -147,7 +162,12 @@ export class AttendanceExportService {
     const deadline = installResponseDeadline(response, {
       onExpire: () => {
         this.logger.warn(
-          { organizationId: auth.organizationId, format: query.format, rows: totals.rowCount },
+          {
+            organizationId: auth.organizationId,
+            format: query.format,
+            variant: query.variant,
+            rows: totals.rowCount,
+          },
           'Attendance export closed: the client stopped reading',
         );
       },
@@ -210,6 +230,7 @@ export class AttendanceExportService {
       err: error,
       organizationId: auth.organizationId,
       format: query.format,
+      variant: query.variant,
       rows: totals.rowCount,
     };
 
@@ -247,6 +268,11 @@ export class AttendanceExportService {
   private describe(query: ExportQuery): Record<string, string | number | boolean> {
     return {
       format: query.format,
+      // Audited alongside the format, because "which sheet did they take" is a
+      // question about *what left the building* — the two variants carry
+      // different amounts of an employee's day — and an audit row that records
+      // only the file extension cannot answer it after the fact.
+      variant: query.variant,
       from: query.from,
       to: query.to,
       singleEmployee: query.userId !== undefined,

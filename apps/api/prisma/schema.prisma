@@ -53,6 +53,15 @@ enum PunchType {
 }
 
 /// Derived per-day state. Computed from punches + organization workday policy.
+/// How a record came to exist. A hand-entered record and a real punch must never
+/// be indistinguishable: in an attendance system the ability to type in a day
+/// somebody did not work is the single most abusable feature, so every manual
+/// row names the administrator who created it.
+enum AttendanceSource {
+  PUNCH
+  MANUAL
+}
+
 enum AttendanceStatus {
   PRESENT
   LATE
@@ -75,7 +84,7 @@ model Organization {
   /// Local wall-clock start of the workday, "HH:mm". Drives LATE classification.
   workdayStart      String @default("09:00") @db.VarChar(5)
   /// Local wall-clock end of the workday, "HH:mm". Used for reporting only.
-  workdayEnd        String @default("17:00") @db.VarChar(5)
+  workdayEnd        String @default("18:00") @db.VarChar(5)
   /// Local wall-clock time at which the *business day* rolls over, "HH:mm".
   ///
   /// This is the boundary `workDate` is cut on, and it is not the same question
@@ -152,6 +161,8 @@ model User {
   deletedAt DateTime? @db.Timestamptz(3)
 
   organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  avatar            UserAvatar?
+  enteredRecords    AttendanceRecord[] @relation("ManualAttendanceEntry")
   sessions          Session[]
   attendanceRecords AttendanceRecord[]
   attendanceEvents  AttendanceEvent[]
@@ -161,6 +172,23 @@ model User {
   @@unique([organizationId, employeeCode])
   @@index([organizationId, status])
   @@map("users")
+}
+
+/// A user's profile picture, in its own table so that every query against `users`
+/// — and there are many, on every authenticated request — does not drag image
+/// bytes through the connection. Stored in the database rather than on disk
+/// because it keeps a deployment to one backup artefact; the client re-encodes
+/// to JPEG and caps the dimensions before upload, so rows stay small.
+model UserAvatar {
+  userId    String   @id @db.Uuid
+  mimeType  String   @db.VarChar(64)
+  byteSize  Int
+  data      Bytes
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_avatars")
 }
 
 /// One row per refresh-token issuance. Rotation replaces the row; reuse of a
@@ -254,6 +282,15 @@ model AttendanceRecord {
   checkOutAccuracyM Float?
   checkOutDistanceM Float?
 
+  /// PUNCH for a record the employee created themselves; MANUAL when an
+  /// administrator entered or corrected it after the fact.
+  source      AttendanceSource @default(PUNCH)
+  /// The administrator who last entered or edited this record by hand.
+  enteredById String?          @db.Uuid
+  enteredAt   DateTime?        @db.Timestamptz(3)
+  /// Why it was entered by hand — "forgot to check out", "on a site visit".
+  note        String?          @db.VarChar(255)
+
   status        AttendanceStatus @default(PRESENT)
   /// Whole minutes between check-in and check-out. Null until checked out.
   workedMinutes Int?
@@ -265,6 +302,7 @@ model AttendanceRecord {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enteredBy    User?        @relation("ManualAttendanceEntry", fields: [enteredById], references: [id], onDelete: SetNull)
   checkInSite  Site?        @relation("CheckInSite", fields: [checkInSiteId], references: [id])
   checkOutSite Site?        @relation("CheckOutSite", fields: [checkOutSiteId], references: [id])
 

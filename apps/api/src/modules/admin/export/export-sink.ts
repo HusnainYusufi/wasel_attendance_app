@@ -1,6 +1,6 @@
 import type { Writable } from 'node:stream';
 import { once } from 'node:events';
-import type { ReportSummary } from '@wasel/contracts';
+import type { ExportVariant, ReportSummary } from '@wasel/contracts';
 import type { ReportRecord } from '../admin.mapper.js';
 import type { ReportContext, ReportRange, TimezoneChange } from '../admin-reports.service.js';
 
@@ -28,6 +28,16 @@ export interface ExportSinkOptions {
   context: ReportContext;
   range: ReportRange;
   generatedAt: Date;
+  /**
+   * Which sheet to build — see `export-sheet.ts`.
+   *
+   * The variant travels in the options rather than being baked into a sink
+   * factory per variant, so there stays exactly one CSV writer and one XLSX
+   * writer. The properties this file exists to guarantee — a write that respects
+   * the socket, a drain that gives up when the client does — are then impossible
+   * to have in one variant and not the other.
+   */
+  variant: ExportVariant;
   /**
    * Timezone moves recorded on or after the range's first day, oldest first.
    *

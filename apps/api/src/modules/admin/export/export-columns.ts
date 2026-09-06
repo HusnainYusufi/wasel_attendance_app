@@ -1,4 +1,4 @@
-import { PunchType, formatDistance } from '@wasel/contracts';
+import { AttendanceSource, PunchType, formatDistance } from '@wasel/contracts';
 import { outOfRangePunches, type ReportRecord } from '../admin.mapper.js';
 import { formatWallClock, toIsoDate, toSpreadsheetDate } from '../admin.time.js';
 import { neutralizeFormula } from './csv.js';
@@ -77,6 +77,11 @@ export const EXPORT_COLUMNS: readonly ExportColumn[] = [
   { header: 'Check-out distance from site', width: 26, numFmt: DISTANCE_FORMAT },
   { header: 'Check-out GPS accuracy (radius)', width: 28, numFmt: DISTANCE_FORMAT },
   { header: 'Outside geofence', width: 20 },
+  // Beside the geofence flag rather than at the end: both columns answer the
+  // same question — how far should I trust this row — and a reader scanning for
+  // "which of these days did somebody type in" should not have to hunt for it.
+  { header: 'Entered by hand', width: 24 },
+  { header: 'Reason for manual entry', width: 34 },
   { header: 'Status', width: 12 },
   { header: 'Worked minutes', width: 16, numFmt: '0' },
   { header: 'Late minutes', width: 14, numFmt: '0' },
@@ -109,15 +114,29 @@ export const TIMEZONE_CHANGED_NOTE =
   'timezone changed since these records were made — work dates were not restated';
 
 /**
+ * Column titles, with the zone spelled out on the ones that render an instant.
+ *
+ * Shared by both variants rather than written twice: a second copy of this rule
+ * would eventually annotate one sheet and not the other, and "which of these two
+ * files is telling me the truth about the timezone" is the exact question the
+ * annotation exists to answer.
+ *
  * @param zoneChanged True when the tenant's timezone moved on or after the first
  * day of the exported range, so the instants below are rendered in a zone that
  * was not in force when they were recorded.
  */
-export function exportHeaders(timezone: string, zoneChanged: boolean): string[] {
+export function zonedHeaders(
+  columns: readonly ExportColumn[],
+  timezone: string,
+  zoneChanged: boolean,
+): string[] {
   const zone = zoneChanged ? `${timezone}; ${TIMEZONE_CHANGED_NOTE}` : timezone;
-  return EXPORT_COLUMNS.map((column) =>
-    column.zoned ? `${column.header} (${zone})` : column.header,
-  );
+  return columns.map((column) => (column.zoned ? `${column.header} (${zone})` : column.header));
+}
+
+/** The detailed sheet's headers. */
+export function exportHeaders(timezone: string, zoneChanged: boolean): string[] {
+  return zonedHeaders(EXPORT_COLUMNS, timezone, zoneChanged);
 }
 
 /** A CSV line: everything already rendered as text or a number. */
@@ -140,10 +159,24 @@ export function csvCells(record: ReportRecord, timezone: string): Array<string |
     distanceText(record.checkOutDistanceM),
     distanceText(record.checkOutAccuracyM),
     outOfRangeCell(record),
+    enteredByHandCell(record),
+    record.note,
     record.status,
     record.workedMinutes,
     record.lateMinutes,
   ];
+}
+
+/**
+ * Who typed this row in, or nothing at all when the employee punched it.
+ *
+ * Blank rather than "No" for a real punch, so the column filters to exactly the
+ * hand-entered days in one click — and so a row whose provenance is a real punch
+ * makes no claim at all, which is the honest thing for it to say.
+ */
+export function enteredByHandCell(record: ReportRecord): string | null {
+  if (record.source !== AttendanceSource.MANUAL) return null;
+  return record.enteredBy?.fullName ?? 'an administrator (since removed)';
 }
 
 /** A distance as a person reads it, or nothing at all when there is no distance. */
@@ -152,7 +185,7 @@ function distanceText(value: number | null): string | null {
 }
 
 /** `neutralizeFormula`, but transparent about a cell that has no value. */
-function text(value: string | null | undefined): string | null {
+export function safeText(value: string | null | undefined): string | null {
   return value === null || value === undefined ? null : neutralizeFormula(value);
 }
 
@@ -183,11 +216,11 @@ export function xlsxCells(
     // UTC, which is exactly the serial Excel wants. Only the instants need the
     // wall-clock relabelling.
     record.workDate,
-    text(record.user.employeeCode),
-    text(record.user.fullName),
-    text(record.user.email),
+    safeText(record.user.employeeCode),
+    safeText(record.user.fullName),
+    safeText(record.user.email),
     toSpreadsheetDate(record.checkInAt, timezone),
-    text(record.checkInSite?.name),
+    safeText(record.checkInSite?.name),
     // Numbers, not the rendered strings the CSV carries: the column's number
     // format displays exactly the same text, and keeping the value numeric is
     // what lets an administrator sort by "how far away was this" — the single
@@ -197,10 +230,12 @@ export function xlsxCells(
     record.checkInDistanceM,
     record.checkInAccuracyM,
     record.checkOutAt === null ? null : toSpreadsheetDate(record.checkOutAt, timezone),
-    text(record.checkOutSite?.name),
+    safeText(record.checkOutSite?.name),
     record.checkOutDistanceM,
     record.checkOutAccuracyM,
-    text(outOfRangeCell(record)),
+    safeText(outOfRangeCell(record)),
+    safeText(enteredByHandCell(record)),
+    safeText(record.note),
     record.status,
     record.workedMinutes,
     record.lateMinutes,

@@ -10,12 +10,17 @@ import {
   Button,
   Input,
   LockIcon,
+  MailIcon,
   SegmentedControl,
   Sheet,
   useToast,
   type ThemePreference,
 } from '../../design';
 import { useTheme } from '../../design';
+import { RemindersSetting } from '../notifications';
+import { AvatarPicker } from './AvatarPicker';
+import { useAvatarObjectUrl, useProfile } from './useProfile';
+import { useProfileEditor } from './useProfileEditor';
 import styles from './AccountSheet.module.css';
 
 export interface AccountSheetProps {
@@ -28,6 +33,11 @@ const THEME_OPTIONS = [
   { value: 'light' as const, label: 'Light' },
   { value: 'dark' as const, label: 'Dark' },
 ];
+
+const PROFILE_FORM_ID = 'edit-profile-form';
+const PASSWORD_FORM_ID = 'change-password-form';
+
+type View = 'menu' | 'profile' | 'password';
 
 interface PasswordFieldErrors {
   currentPassword?: string;
@@ -49,25 +59,36 @@ function validateNewPassword(value: string): string | undefined {
   return undefined;
 }
 
+const TITLES: Record<View, string> = {
+  menu: 'Your account',
+  profile: 'Edit profile',
+  password: 'Change password',
+};
+
 /**
  * Account, appearance and sign-out, reachable from the header of every screen.
  *
- * The change-password form lives in this same sheet rather than a second one
- * stacked on top: two open dialogs mean two focus traps competing for the same
- * document, and the one underneath wins on some browsers.
+ * All three views live in this one sheet rather than stacking dialogs: two open
+ * dialogs mean two focus traps competing for the same document, and the one
+ * underneath wins on some browsers.
  */
 export function AccountSheet({ open, onClose }: AccountSheetProps) {
   const { user, signOut } = useAuth();
   const { preference, setPreference } = useTheme();
   const toast = useToast();
 
-  const [view, setView] = useState<'menu' | 'password'>('menu');
+  const { data: profile } = useProfile();
+  const avatarUrl = useAvatarObjectUrl(profile?.id, profile?.avatar?.updatedAt);
+
+  const [view, setView] = useState<View>('menu');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [errors, setErrors] = useState<PasswordFieldErrors>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+
+  const editor = useProfileEditor(profile, () => setView('menu'));
 
   /**
    * Reset on the *opening* edge, adjusted during render rather than in an
@@ -88,7 +109,7 @@ export function AccountSheet({ open, onClose }: AccountSheetProps) {
     }
   }
 
-  const resetForm = () => {
+  const resetPasswordForm = () => {
     setCurrentPassword('');
     setNewPassword('');
     setConfirmPassword('');
@@ -162,51 +183,75 @@ export function AccountSheet({ open, onClose }: AccountSheetProps) {
     void signOut().finally(() => setSigningOut(false));
   };
 
+  const openProfile = () => {
+    // Seeded from the profile that is loaded *now*, not from whatever the hook
+    // saw on its first render — the sheet is usually mounted before the query
+    // resolves.
+    editor.reset();
+    setView('profile');
+  };
+
   if (!user) return null;
 
-  const isPasswordView = view === 'password';
+  const displayName = profile?.fullName ?? user.fullName;
+  const description =
+    view === 'password'
+      ? 'Changing your password signs you out everywhere.'
+      : view === 'profile'
+        ? 'Your picture, name and sign-in address.'
+        : `${user.organizationName} · ${user.timezone}`;
+
+  const footer =
+    view === 'password' ? (
+      <>
+        <Button
+          variant="secondary"
+          onClick={() => {
+            setView('menu');
+            resetPasswordForm();
+          }}
+          disabled={changePassword.isPending}
+        >
+          Back
+        </Button>
+        <Button
+          type="submit"
+          form={PASSWORD_FORM_ID}
+          loading={changePassword.isPending}
+          iconStart={<LockIcon size="1.05rem" />}
+        >
+          Change password
+        </Button>
+      </>
+    ) : view === 'profile' ? (
+      <>
+        <Button
+          variant="secondary"
+          onClick={() => setView('menu')}
+          disabled={editor.saving || editor.avatarBusy}
+        >
+          Back
+        </Button>
+        <Button type="submit" form={PROFILE_FORM_ID} loading={editor.saving}>
+          Save changes
+        </Button>
+      </>
+    ) : (
+      <Button variant="danger" fullWidth loading={signingOut} onClick={onSignOut}>
+        Sign out
+      </Button>
+    );
 
   return (
     <Sheet
       open={open}
       onClose={onClose}
-      title={isPasswordView ? 'Change password' : 'Your account'}
-      description={
-        isPasswordView
-          ? 'Changing your password signs you out everywhere.'
-          : `${user.organizationName} · ${user.timezone}`
-      }
-      footer={
-        isPasswordView ? (
-          <>
-            <Button
-              variant="secondary"
-              onClick={() => {
-                setView('menu');
-                resetForm();
-              }}
-              disabled={changePassword.isPending}
-            >
-              Back
-            </Button>
-            <Button
-              type="submit"
-              form="change-password-form"
-              loading={changePassword.isPending}
-              iconStart={<LockIcon size="1.05rem" />}
-            >
-              Change password
-            </Button>
-          </>
-        ) : (
-          <Button variant="danger" fullWidth loading={signingOut} onClick={onSignOut}>
-            Sign out
-          </Button>
-        )
-      }
+      title={TITLES[view]}
+      description={description}
+      footer={footer}
     >
-      {isPasswordView ? (
-        <form id="change-password-form" className={styles.form} onSubmit={onSubmitPassword}>
+      {view === 'password' ? (
+        <form id={PASSWORD_FORM_ID} className={styles.form} onSubmit={onSubmitPassword}>
           {formError ? <Banner tone="danger" title={formError} /> : null}
 
           <Input
@@ -241,13 +286,71 @@ export function AccountSheet({ open, onClose }: AccountSheetProps) {
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </form>
+      ) : view === 'profile' ? (
+        <form id={PROFILE_FORM_ID} className={styles.form} onSubmit={editor.submit}>
+          {editor.formError ? <Banner tone="danger" title={editor.formError} /> : null}
+
+          <AvatarPicker
+            name={displayName}
+            src={avatarUrl}
+            busy={editor.avatarBusy}
+            onPick={editor.pickAvatar}
+            onRemove={editor.removeAvatar}
+          />
+
+          <Input
+            label="Full name"
+            autoComplete="name"
+            required
+            value={editor.fullName}
+            error={editor.errors.fullName}
+            onChange={(event) => editor.setFullName(event.target.value)}
+          />
+          <Input
+            label="Email address"
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            autoCapitalize="none"
+            spellCheck={false}
+            required
+            iconStart={<MailIcon size="1.05rem" />}
+            hint="This is what you sign in with."
+            value={editor.email}
+            error={editor.errors.email}
+            onChange={(event) => editor.setEmail(event.target.value)}
+          />
+
+          {editor.emailChanged ? (
+            <>
+              {/* Shown only once the address actually differs. Asking for a
+                  password up front on a form whose usual use is fixing a name
+                  would read as a demand for no reason. */}
+              <Banner
+                tone="warning"
+                title="Changing your email signs you out everywhere"
+                description="Confirm your password, then sign in again with the new address."
+              />
+              <Input
+                label="Current password"
+                type="password"
+                revealToggle
+                autoComplete="current-password"
+                required
+                value={editor.currentPassword}
+                error={editor.errors.currentPassword}
+                onChange={(event) => editor.setCurrentPassword(event.target.value)}
+              />
+            </>
+          ) : null}
+        </form>
       ) : (
         <div className={styles.stack}>
           <div className={styles.identity}>
-            <Avatar name={user.fullName} size="lg" />
+            <Avatar name={displayName} src={avatarUrl} size="lg" />
             <div className={styles.identityText}>
-              <span className={styles.name}>{user.fullName}</span>
-              <span className={styles.email}>{user.email}</span>
+              <span className={styles.name}>{displayName}</span>
+              <span className={styles.email}>{profile?.email ?? user.email}</span>
             </div>
           </div>
 
@@ -268,6 +371,11 @@ export function AccountSheet({ open, onClose }: AccountSheetProps) {
             </dl>
           </div>
 
+          {/* Owned by the notifications feature: it manages its own state and
+              renders its own section, so the switch and the permission it
+              depends on stay described in one place. */}
+          <RemindersSetting timezone={user.timezone} />
+
           <div className={styles.section}>
             <span className={styles.sectionTitle}>Appearance</span>
             <SegmentedControl<ThemePreference>
@@ -280,7 +388,10 @@ export function AccountSheet({ open, onClose }: AccountSheetProps) {
           </div>
 
           <div className={styles.section}>
-            <span className={styles.sectionTitle}>Security</span>
+            <span className={styles.sectionTitle}>Account</span>
+            <Button variant="secondary" fullWidth disabled={!profile} onClick={openProfile}>
+              Edit profile
+            </Button>
             <Button
               variant="secondary"
               fullWidth

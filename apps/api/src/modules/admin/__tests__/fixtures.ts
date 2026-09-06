@@ -1,4 +1,4 @@
-import { AttendanceStatus } from '@wasel/contracts';
+import { AttendanceSource, AttendanceStatus } from '@wasel/contracts';
 import type { ReportRecord } from '../admin.mapper.js';
 
 /** A complete, checked-out attendance line. Override only what a test is about. */
@@ -17,7 +17,12 @@ export function reportRecord(overrides: Partial<ReportRecord> = {}): ReportRecor
     status: AttendanceStatus.PRESENT,
     workedMinutes: 496,
     lateMinutes: 0,
+    // A real punch by default: a test about hand-entered records should have to
+    // say so, rather than every other test quietly depending on the default.
+    source: AttendanceSource.PUNCH,
+    note: null,
     user: { fullName: 'Sara Haddad', email: 'sara@wasel.test', employeeCode: 'EMP-1' },
+    enteredBy: null,
     // Both punches comfortably inside the fence, so a test about anything else
     // is not silently also a test about being out of range.
     checkInSite: { name: 'Head Office', radiusMeters: 150 },

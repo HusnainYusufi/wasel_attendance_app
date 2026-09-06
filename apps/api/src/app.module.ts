@@ -10,6 +10,8 @@ import { HealthModule } from './health/health.module.js';
 import { AdminModule } from './modules/admin/admin.module.js';
 import { AttendanceModule } from './modules/attendance/attendance.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { ProfileModule } from './modules/profile/profile.module.js';
+import { RemindersModule } from './modules/reminders/reminders.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 
 @Module({
@@ -33,6 +35,8 @@ import { PrismaModule } from './prisma/prisma.module.js';
     AuthModule,
     AttendanceModule,
     AdminModule,
+    ProfileModule,
+    RemindersModule,
   ],
   providers: [
     // Global so that a module author cannot forget it and ship a route that

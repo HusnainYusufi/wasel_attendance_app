@@ -1,0 +1,55 @@
+.picker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.plate {
+  position: relative;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+}
+
+/* Sits over the picture rather than replacing it, so the face does not vanish
+   and reappear while an upload is in flight. */
+.busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-full);
+  background-color: light-dark(rgb(255 255 255 / 0.72), rgb(0 0 0 / 0.6));
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.hint {
+  flex-basis: 100%;
+  margin: 0;
+  font-size: var(--font-size-2xs);
+  line-height: var(--leading-snug, 1.35);
+  color: var(--color-text-subtle);
+  text-wrap: pretty;
+}
+
+/* Visually hidden, but still focusable-by-proxy and still in the accessibility
+   tree — `display: none` would make `.click()` a no-op in some browsers. */
+.input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}

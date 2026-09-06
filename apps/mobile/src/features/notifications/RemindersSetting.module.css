@@ -1,0 +1,53 @@
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding-block-start: var(--space-4);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+}
+
+.header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+/* The permission state, said in two words next to the heading rather than
+   buried in the paragraph below — it is the thing a user checks at a glance. */
+.state {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wide);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.stateOk {
+  color: var(--color-success-text);
+}
+
+.stateWarn {
+  color: var(--color-warning-text);
+}
+
+.stateMuted {
+  color: var(--color-text-subtle);
+}
+
+.hint {
+  margin: 0;
+  font-size: var(--font-size-md);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+  /* Long device-settings paths must wrap rather than widen the sheet. */
+  overflow-wrap: anywhere;
+}

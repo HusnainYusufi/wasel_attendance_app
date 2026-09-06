@@ -25,6 +25,7 @@ import { LocationPanel } from '../../features/attendance/LocationPanel';
 import { TodayCard } from '../../features/attendance/TodayCard';
 import { GeolocationFailure } from '../../features/geolocation/geolocation';
 import { useGeolocation } from '../../features/geolocation/useGeolocation';
+import { useShiftReminders } from '../../features/notifications';
 import { formatFullDate, formatTimeWithSeconds } from '../../lib/datetime';
 import { hapticError, hapticSuccess, hapticTap, hapticWarning } from '../../lib/haptics';
 import { sentences } from '../../lib/text';
@@ -58,6 +59,10 @@ export default function HomeScreen() {
 
   const geo = useGeolocation({ auto: true });
   const now = useLiveClock();
+  // Keeps this device's check-out reminders in step with the server's plan: it
+  // syncs on mount and on every resume, so a phone that was switched off, or a
+  // shift closed on another device, cannot leave stale alarms behind.
+  const reminders = useShiftReminders();
 
   const [notice, setNotice] = useState<PunchNotice | null>(null);
   // A second latch behind `Button loading`: a fast double-tap can dispatch two
@@ -93,6 +98,15 @@ export default function HomeScreen() {
     },
     onSuccess: (result) => {
       hapticSuccess();
+      // Fire-and-forget, and deliberately after the punch has already succeeded.
+      // Android 13+ asks for POST_NOTIFICATIONS at this moment and no earlier,
+      // so the dialog arrives with obvious context — the user has just said they
+      // are at work. Whatever they answer, the punch is already recorded; a
+      // denied permission, an unreachable reminders endpoint or a browser with
+      // no notification plugin at all changes nothing about this screen.
+      if (result.type === PunchType.CHECK_IN) reminders.afterCheckIn();
+      else reminders.afterCheckOut();
+
       const verb = result.type === PunchType.CHECK_IN ? 'Checked in' : 'Checked out';
       setNotice({
         tone: 'success',

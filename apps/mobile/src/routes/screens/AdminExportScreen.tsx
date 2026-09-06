@@ -1,7 +1,9 @@
 import { keepPreviousData, useMutation, useQuery } from '@tanstack/react-query';
 import {
   EXPORT_MAX_RANGE_DAYS,
+  EXPORT_VARIANT_COLUMNS,
   ExportFormat,
+  ExportVariant,
   PAGE_SIZE_MAX,
   inclusiveDayCount,
   type ExportQuery,
@@ -39,6 +41,42 @@ import {
 import styles from './AdminExportScreen.module.css';
 
 const ALL_PEOPLE = 'ALL';
+
+/**
+ * What each sheet is *for*, in the words of the person choosing it.
+ *
+ * The column list below says what is in the file; this says why you would want
+ * it. Together they are the whole reason the picker exists — the alternative is
+ * finding out after a multi-second export, a download and an open, and then doing
+ * it again.
+ */
+const VARIANT_COPY: Record<ExportVariant, { label: string; meta: string; purpose: string }> = {
+  [ExportVariant.DETAILED]: {
+    label: 'Detailed',
+    meta: `${EXPORT_VARIANT_COLUMNS[ExportVariant.DETAILED].length} columns`,
+    purpose:
+      'Everything recorded about each day — where each punch happened, how far from the site, how accurate the fix was, and whether it fell outside the geofence.',
+  },
+  [ExportVariant.MINIFIED]: {
+    label: 'Minified',
+    meta: `${EXPORT_VARIANT_COLUMNS[ExportVariant.MINIFIED].length} columns`,
+    purpose:
+      'The payroll extract: who, which day, in, out and total hours. Nothing else, so there is nothing else to read by mistake.',
+  },
+};
+
+/**
+ * The one thing about a column that is not obvious from its name.
+ *
+ * Hours are a decimal rather than `8:16` so the column can be multiplied by a
+ * rate and summed — in a CSV `8:16` is not a duration to a spreadsheet, it is a
+ * time of day, and a column of them totals to a fifth of the truth.
+ */
+const VARIANT_NOTE: Record<ExportVariant, string | null> = {
+  [ExportVariant.DETAILED]: null,
+  [ExportVariant.MINIFIED]:
+    'Total hours is a decimal — 8.27 means 8 h 16 m — and stays a real number in Excel, so selecting the column gives you a total.',
+};
 
 type Preset = 'this-month' | 'last-month' | 'last-7' | 'last-30' | 'custom';
 
@@ -99,6 +137,7 @@ export default function AdminExportScreen() {
   const [to, setTo] = useState(() => endOfMonth(today));
   const [userId, setUserId] = useState<string>(ALL_PEOPLE);
   const [format, setFormat] = useState<ExportFormat>(ExportFormat.XLSX);
+  const [variant, setVariant] = useState<ExportVariant>(ExportVariant.DETAILED);
   const [outcome, setOutcome] = useState<SaveOutcome | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [startedAt, setStartedAt] = useState<number | null>(null);
@@ -133,7 +172,7 @@ export default function AdminExportScreen() {
    * talking about a file that has nothing to do with what the form now says —
    * so it is cleared, during render, before either can be painted together.
    */
-  const selection = `${from}|${to}|${userId}|${format}`;
+  const selection = `${from}|${to}|${userId}|${format}|${variant}`;
   const [resultFor, setResultFor] = useState(selection);
   if (resultFor !== selection) {
     setResultFor(selection);
@@ -205,10 +244,15 @@ export default function AdminExportScreen() {
         from,
         to,
         format,
+        variant,
         ...(userId === ALL_PEOPLE ? {} : { userId }),
       };
       const response = await adminApi.exportAttendance(query);
-      const fallback = `wasel-attendance-${from}_${to}.${format}`;
+      // Only ever used when the server sent no filename; it still names the
+      // variant, because two files of one range that differ only in their columns
+      // must not land in the same folder under one name.
+      const kind = variant === ExportVariant.MINIFIED ? 'minified-' : '';
+      const fallback = `wasel-attendance-${kind}${from}_${to}.${format}`;
       return saveFile(response.blob, response.filename, fallback);
     },
     onSuccess: (result) => {
@@ -250,6 +294,8 @@ export default function AdminExportScreen() {
   const summary = preview.data?.summary;
   const emptyRange = preview.isSuccess && summary?.totalRecords === 0;
   const selectedPerson = people.data?.find((person) => person.id === userId);
+  const columns = EXPORT_VARIANT_COLUMNS[variant];
+  const variantNote = VARIANT_NOTE[variant];
 
   return (
     <Screen
@@ -325,6 +371,25 @@ export default function AdminExportScreen() {
           ))}
         </Select>
 
+        <SegmentedControl<ExportVariant>
+          label="Sheet"
+          fullWidth
+          value={variant}
+          onChange={setVariant}
+          options={[
+            {
+              value: ExportVariant.DETAILED,
+              label: VARIANT_COPY[ExportVariant.DETAILED].label,
+              meta: VARIANT_COPY[ExportVariant.DETAILED].meta,
+            },
+            {
+              value: ExportVariant.MINIFIED,
+              label: VARIANT_COPY[ExportVariant.MINIFIED].label,
+              meta: VARIANT_COPY[ExportVariant.MINIFIED].meta,
+            },
+          ]}
+        />
+
         <SegmentedControl<ExportFormat>
           label="File format"
           fullWidth
@@ -340,9 +405,38 @@ export default function AdminExportScreen() {
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>What you will get</h2>
 
+        {/* The columns do not depend on the range, so this is shown even while
+            the dates are wrong: it is the half of the preview that answers
+            "did I pick the right sheet", which is the mistake that costs a
+            second download. */}
+        <Card variant="outlined">
+          <div className={styles.columns}>
+            <div className={styles.columnsHead}>
+              <p className={styles.columnsTitle}>{VARIANT_COPY[variant].label} sheet</p>
+              <span className={styles.columnsCount}>
+                {columns.length} {columns.length === 1 ? 'column' : 'columns'}
+              </span>
+            </div>
+            <p className={styles.columnsPurpose}>{VARIANT_COPY[variant].purpose}</p>
+            <ol className={styles.columnList}>
+              {columns.map((column, index) => (
+                <li key={column} className={styles.column}>
+                  <span className={styles.columnIndex}>{index + 1}</span>
+                  {column}
+                </li>
+              ))}
+            </ol>
+            <p className={styles.columnsNote}>
+              Check-in and check-out are the wall clock in {timezone.replace(/_/g, ' ')}, and the
+              file says so.
+              {variantNote === null ? '' : ` ${variantNote}`}
+            </p>
+          </div>
+        </Card>
+
         {!rangeValid ? (
           <Card variant="outlined">
-            <p className="u-body-sm">Fix the date range above to see what the file will contain.</p>
+            <p className="u-body-sm">Fix the date range above to see how many rows it will have.</p>
           </Card>
         ) : preview.isPending ? (
           <Card>
@@ -415,7 +509,8 @@ export default function AdminExportScreen() {
                 {elapsed < 5 ? 'Building your sheet…' : 'Still building — large ranges take longer'}
               </span>
               <span className={styles.progressDetail}>
-                {elapsed}s elapsed · {days} {days === 1 ? 'day' : 'days'} · {format.toUpperCase()}
+                {elapsed}s elapsed · {days} {days === 1 ? 'day' : 'days'} ·{' '}
+                {VARIANT_COPY[variant].label} · {format.toUpperCase()}
               </span>
             </div>
           </div>
@@ -446,7 +541,9 @@ export default function AdminExportScreen() {
         >
           {download.isPending
             ? 'Preparing…'
-            : `Download ${format === ExportFormat.CSV ? 'CSV' : 'Excel'} file`}
+            : `Download ${VARIANT_COPY[variant].label.toLowerCase()} ${
+                format === ExportFormat.CSV ? 'CSV' : 'Excel'
+              } file`}
         </Button>
       </div>
     </Screen>

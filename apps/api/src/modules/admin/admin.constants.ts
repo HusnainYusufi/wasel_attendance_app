@@ -19,6 +19,18 @@ export const AdminAuditAction = {
    * between an alert and an archaeology exercise.
    */
   ADMIN_PASSWORD_RESET: 'admin.user.admin_password_reset',
+  /**
+   * A day recorded by hand, and the two verbs that follow it.
+   *
+   * Namespaced apart from the site and user actions because they answer a
+   * different question, and the one an auditor asks first: *which* attendance
+   * did a human type in, rather than punch. The rows carry the record's before
+   * and after in their metadata, so a correction is readable without the row it
+   * corrected — which, after a delete, is the only copy left.
+   */
+  ATTENDANCE_ENTRY_CREATED: 'admin.attendance.created',
+  ATTENDANCE_ENTRY_UPDATED: 'admin.attendance.updated',
+  ATTENDANCE_ENTRY_DELETED: 'admin.attendance.deleted',
   SITE_CREATED: 'admin.site.created',
   SITE_UPDATED: 'admin.site.updated',
   SITE_DELETED: 'admin.site.deleted',
@@ -48,6 +60,7 @@ export type AdminAuditAction = (typeof AdminAuditAction)[keyof typeof AdminAudit
 /** `AuditLog.entityType` values. Prisma model names, so a row can be resolved. */
 export const AdminAuditEntity = {
   USER: 'User',
+  ATTENDANCE_RECORD: 'AttendanceRecord',
   SITE: 'Site',
   ORGANIZATION: 'Organization',
   REPORT: 'AttendanceReport',

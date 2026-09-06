@@ -25,6 +25,17 @@ const config: CapacitorConfig = {
       androidSplashResourceName: 'splash',
       showSpinner: false,
     },
+    LocalNotifications: {
+      // Only the accent colour. `smallIcon` is deliberately left unset: it
+      // resolves against `res/drawable`, the brand assets this project ships are
+      // `res/mipmap` launcher PNGs, and a name that does not resolve falls back
+      // to Android's generic info glyph anyway (see `getDefaultSmallIcon` in the
+      // plugin). Pointing it at a resource that does not exist would look like a
+      // configured icon while being exactly the unconfigured one. A proper
+      // monochrome status-bar drawable is a brand asset this project does not
+      // have yet.
+      iconColor: '#3266E5',
+    },
     StatusBar: {
       // The app shell paints its own safe-area strip, so the status bar is
       // transparent and content flows beneath it.

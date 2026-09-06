@@ -12,6 +12,7 @@ import {
   EXPORT_MAX_RANGE_DAYS,
   ExportFormat,
   exportQuerySchema,
+  ExportVariant,
   Role,
   type AttendanceReportQuery,
   type ExportQuery,
@@ -70,12 +71,21 @@ export class AdminReportsController {
     description:
       'Streams an XLSX workbook or an RFC 4180 CSV. Times are the wall clock in ' +
       "the organization's timezone, which the file states. An empty range " +
-      'produces a valid file containing only the header row.',
+      'produces a valid file containing only the header row. `variant=detailed` ' +
+      '(the default) is the full sheet — sites, distances, GPS accuracy, ' +
+      'geofence flags, late minutes. `variant=minified` is the payroll extract: ' +
+      'work date, employee, check-in, check-out and total hours as a decimal, ' +
+      'which the workbook stores as a real number so the column can be summed.',
   })
   @ApiQuery({ name: 'from', ...RANGE_QUERY })
   @ApiQuery({ name: 'to', ...RANGE_QUERY })
   @ApiQuery({ name: 'userId', required: false, schema: { type: 'string', format: 'uuid' } })
   @ApiQuery({ name: 'format', required: false, enum: [ExportFormat.XLSX, ExportFormat.CSV] })
+  @ApiQuery({
+    name: 'variant',
+    required: false,
+    enum: [ExportVariant.DETAILED, ExportVariant.MINIFIED],
+  })
   @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'text/csv')
   @ApiResponse({
     status: 200,

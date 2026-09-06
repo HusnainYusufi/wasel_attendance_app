@@ -9,6 +9,7 @@ export const paths = {
   admin: '/admin',
   adminUsers: '/admin/users',
   adminSites: '/admin/sites',
+  adminAttendance: '/admin/attendance',
   adminExport: '/admin/export',
   kitchenSink: '/__kitchen-sink',
 } as const;

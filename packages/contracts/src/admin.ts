@@ -13,6 +13,7 @@ import {
   uuidSchema,
   inclusiveDayCount,
 } from './common.js';
+import { AttendanceSource } from './attendance-entry.js';
 import {
   ACCURACY_CEILING_M,
   AttendanceStatus,
@@ -221,10 +222,79 @@ const withRangeRules = <T extends z.ZodType<{ from: string; to: string }>>(schem
 export const attendanceReportQuerySchema = withRangeRules(paginationQuerySchema.extend(rangeShape));
 export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
 
+/**
+ * Which attendance sheet to build.
+ *
+ * A second axis alongside `format`, not a second endpoint: the range, the
+ * tenancy predicate, the keyset stream and the streaming discipline are
+ * identical either way, and only the columns differ. Splitting the route would
+ * have meant two copies of every one of those properties, and the export path's
+ * hard-won ones — CSV-injection neutralisation, backpressure, the stall deadline
+ * — are exactly the kind that rot in the copy nobody audited.
+ *
+ * `detailed` is the sheet that has always existed: sites, distances, GPS
+ * accuracy, geofence flags, late minutes. `minified` is the payroll extract —
+ * who, which day, in, out, hours — and nothing else, because the reader of that
+ * sheet is transcribing four numbers into another system and every extra column
+ * is a chance to read the wrong one.
+ */
+export const ExportVariant = {
+  DETAILED: 'detailed',
+  MINIFIED: 'minified',
+} as const;
+export type ExportVariant = (typeof ExportVariant)[keyof typeof ExportVariant];
+
+/**
+ * The column headers each variant produces, in order.
+ *
+ * Published in the contract rather than left inside the API because the client
+ * shows them *before* the download: an administrator who picks the wrong sheet
+ * finds out after a multi-second export and a file they then have to delete, so
+ * the picker states what each option actually contains. Having the client
+ * hard-code its own copy of that list is how the promise and the file drift
+ * apart, which is why this is the same array both sides read — the API asserts
+ * its real headers against it.
+ *
+ * Base names only: the two instant columns gain the organization's timezone in
+ * the file itself, because a bare `08:47` is ambiguous the moment the sheet
+ * leaves the machine that made it.
+ */
+export const EXPORT_VARIANT_COLUMNS: Readonly<Record<ExportVariant, readonly string[]>> = {
+  [ExportVariant.DETAILED]: [
+    'Work date',
+    'Employee code',
+    'Full name',
+    'Email',
+    'Check-in',
+    'Check-in site',
+    'Check-in distance from site',
+    'Check-in GPS accuracy (radius)',
+    'Check-out',
+    'Check-out site',
+    'Check-out distance from site',
+    'Check-out GPS accuracy (radius)',
+    'Outside geofence',
+    'Entered by hand',
+    'Reason for manual entry',
+    'Status',
+    'Worked minutes',
+    'Late minutes',
+  ],
+  [ExportVariant.MINIFIED]: ['Work date', 'Employee', 'Check-in', 'Check-out', 'Total hours'],
+};
+
 export const exportQuerySchema = withRangeRules(
   z.object({
     ...rangeShape,
     format: z.enum([ExportFormat.CSV, ExportFormat.XLSX]).default(ExportFormat.XLSX),
+    /**
+     * Defaulted to `detailed`, which is what every caller that predates this
+     * parameter asked for and got. A default of `minified` would silently
+     * shorten the sheet an existing bookmark, script or saved link produces.
+     */
+    variant: z
+      .enum([ExportVariant.DETAILED, ExportVariant.MINIFIED])
+      .default(ExportVariant.DETAILED),
   }),
 );
 export type ExportQuery = z.infer<typeof exportQuerySchema>;
@@ -232,6 +302,16 @@ export type ExportQuery = z.infer<typeof exportQuerySchema>;
 export const reportRowSchema = z.object({
   id: uuidSchema,
   workDate: z.string(),
+  /**
+   * How the row came to exist. Carried on **every** row, punched ones included,
+   * so a hand-entered record is never identified by the absence of a field —
+   * a reader of a payroll sheet must be able to see which days a human typed.
+   */
+  source: z.enum([AttendanceSource.PUNCH, AttendanceSource.MANUAL]),
+  /** The administrator who entered or last corrected it. Null for a real punch. */
+  enteredByName: z.string().nullable(),
+  /** Why it was entered by hand. Null for a real punch. */
+  note: z.string().nullable(),
   userId: uuidSchema,
   userFullName: z.string(),
   userEmail: z.string(),

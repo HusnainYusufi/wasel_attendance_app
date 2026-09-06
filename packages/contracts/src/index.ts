@@ -12,4 +12,7 @@ export * from './common.js';
 export * from './geo.js';
 export * from './auth.js';
 export * from './attendance.js';
+export * from './attendance-entry.js';
 export * from './admin.js';
+export * from './profile.js';
+export * from './reminders.js';

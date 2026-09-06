@@ -1,7 +1,7 @@
 import type { ReportSummary } from '@wasel/contracts';
 import type { ReportRecord } from '../admin.mapper.js';
 import { UTF8_BOM, csvRow } from './csv.js';
-import { csvCells, exportHeaders } from './export-columns.js';
+import { exportSheet, type ExportSheet } from './export-sheet.js';
 import { endStream, writeChunk, type ExportSink, type ExportSinkOptions } from './export-sink.js';
 
 /**
@@ -23,12 +23,17 @@ import { endStream, writeChunk, type ExportSink, type ExportSinkOptions } from '
  * parser that reads it. See {@link exportHeaders}.
  */
 class CsvSink implements ExportSink {
+  private readonly sheet: ExportSheet;
   private pending: string;
 
   constructor(private readonly options: ExportSinkOptions) {
+    this.sheet = exportSheet(options.variant);
+    // The BOM is the first thing in the file whichever variant this is: without
+    // it Excel decodes the bytes as the machine's legacy code page and an Arabic
+    // name arrives as `Ø§Ù„…`.
     this.pending =
       UTF8_BOM +
-      csvRow(exportHeaders(options.context.timezone, options.timezoneChanges.length > 0));
+      csvRow(this.sheet.headers(options.context.timezone, options.timezoneChanges.length > 0));
   }
 
   async writeBatch(records: readonly ReportRecord[]): Promise<void> {
@@ -37,7 +42,7 @@ class CsvSink implements ExportSink {
     this.pending = '';
 
     for (const record of records) {
-      chunk += csvRow(csvCells(record, timezone));
+      chunk += csvRow(this.sheet.csvCells(record, timezone));
     }
 
     // One write per batch, not per row: a `write` syscall per record turns a

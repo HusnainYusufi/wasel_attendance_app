@@ -135,7 +135,9 @@ jobs:
           ./gradlew --no-daemon assembleDebug
 
       # A missing location permission produces an APK that builds, installs, and
-      # then cannot ask for GPS — the one thing the product exists to do. Assert
+      # then cannot ask for GPS — the one thing the product exists to do. A
+      # missing POST_NOTIFICATIONS produces one that can never raise a check-out
+      # reminder on Android 13+, and fails silently rather than loudly. Assert
       # against the actual artifact rather than trusting the step above.
       - name: Verify APK permissions, name and icon
         working-directory: apps/mobile/android/app/build/outputs/apk/debug
@@ -144,7 +146,7 @@ jobs:
           BUILD_TOOLS="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)"
           PERMS="$("${BUILD_TOOLS}/aapt" dump permissions app-debug.apk)"
           echo "${PERMS}"
-          for p in android.permission.INTERNET android.permission.ACCESS_FINE_LOCATION android.permission.ACCESS_COARSE_LOCATION; do
+          for p in android.permission.INTERNET android.permission.ACCESS_FINE_LOCATION android.permission.ACCESS_COARSE_LOCATION android.permission.POST_NOTIFICATIONS; do
             if ! grep -q "${p}" <<< "${PERMS}"; then
               echo "::error::${p} is missing from the built APK. Check apps/mobile/scripts/apply-android-permissions.mjs."
               exit 1

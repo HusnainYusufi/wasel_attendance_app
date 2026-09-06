@@ -1,4 +1,9 @@
-import { AttendanceStatus, attendanceRecordSchema, findNearestSite } from '@wasel/contracts';
+import {
+  AttendanceSource,
+  AttendanceStatus,
+  attendanceRecordSchema,
+  findNearestSite,
+} from '@wasel/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   statusFor,
@@ -28,6 +33,12 @@ function row(overrides: Partial<AttendanceRecordRow> = {}): AttendanceRecordRow 
     checkOutLatitude: null,
     checkOutLongitude: null,
     checkOutAccuracyM: null,
+    // Provenance. Present on every row so that a hand-entered record is never
+    // identified by the *absence* of a field — a punched record says PUNCH.
+    source: AttendanceSource.PUNCH,
+    enteredById: null,
+    enteredAt: null,
+    note: null,
     checkOutDistanceM: null,
     status: AttendanceStatus.INCOMPLETE,
     workedMinutes: null,

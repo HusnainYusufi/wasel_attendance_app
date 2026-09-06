@@ -4,7 +4,7 @@ import { EXPORT_MAX_XLSX_ROWS } from '../admin.constants.js';
 import type { ReportRecord } from '../admin.mapper.js';
 import { formatDuration, formatWallClock } from '../admin.time.js';
 import { WorkbookWriter, type StreamingWorkbook } from './exceljs.js';
-import { EXPORT_COLUMNS, exportHeaders, xlsxCells } from './export-columns.js';
+import { exportSheet, type ExportSheet } from './export-sheet.js';
 import {
   assertClientPresent,
   awaitBackpressure,
@@ -83,9 +83,12 @@ export function assertXlsxRowLimit(rowCount: number): void {
 class XlsxSink implements ExportSink {
   private readonly workbook: StreamingWorkbook;
   private readonly sheet: ReturnType<StreamingWorkbook['addWorksheet']>;
+  /** The variant's columns and cell renderers — see `export-sheet.ts`. */
+  private readonly layout: ExportSheet;
   private rows = 0;
 
   constructor(private readonly options: ExportSinkOptions) {
+    this.layout = exportSheet(options.variant);
     this.workbook = new WorkbookWriter({
       stream: options.stream,
       useStyles: true,
@@ -113,16 +116,19 @@ class XlsxSink implements ExportSink {
     // way at runtime, but only this spelling is in its type definitions.
     this.sheet.autoFilter = {
       from: { row: 1, column: 1 },
-      to: { row: 1, column: EXPORT_COLUMNS.length },
+      to: { row: 1, column: this.layout.columns.length },
     };
 
-    this.sheet.columns = EXPORT_COLUMNS.map((column) => ({
+    // The number formats are what make a numeric cell readable without making it
+    // text: the hours column stores `8.2666…` and displays `8.27`, so selecting
+    // it still produces a total.
+    this.sheet.columns = this.layout.columns.map((column) => ({
       width: column.width,
       ...(column.numFmt === undefined ? {} : { style: { numFmt: column.numFmt } }),
     }));
 
     const header = this.sheet.addRow(
-      exportHeaders(options.context.timezone, options.timezoneChanges.length > 0),
+      this.layout.headers(options.context.timezone, options.timezoneChanges.length > 0),
     );
     header.height = HEADER_HEIGHT;
     header.font = { bold: true, color: { argb: HEADER_TEXT } };
@@ -138,7 +144,7 @@ class XlsxSink implements ExportSink {
 
     for (const record of records) {
       // Committing per row is what flushes it into the zip and releases it.
-      this.sheet.addRow(xlsxCells(record, timezone)).commit();
+      this.sheet.addRow(this.layout.xlsxCells(record, timezone)).commit();
     }
 
     // Rendering the batch was synchronous and told us nothing about whether the
