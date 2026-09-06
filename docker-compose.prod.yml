@@ -101,6 +101,39 @@ services:
     # network; behind an existing proxy, the overlay publishes it to 127.0.0.1
     # only. Neither shape exposes it on the public interface.
 
+  # One-off: create the organization and its first administrator.
+  #
+  #   docker compose ... --profile seed run --rm seed
+  #
+  # Built from the `builder` stage rather than the runtime image on purpose. The
+  # seed is a TypeScript script that imports from `src/`, and the runtime image
+  # ships only compiled `dist/` — deliberately, since shipping source and a
+  # TypeScript loader to production to support a once-per-deployment task is a
+  # poor trade. The builder stage already has everything it needs.
+  seed:
+    profiles: ['seed']
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: builder
+    image: wasel-api-builder:latest
+    restart: 'no'
+    working_dir: /repo/apps/api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wasel_attendance}?schema=public
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:?set the first administrator's email}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:?set the first administrator's password}
+      SEED_ORG_NAME: ${SEED_ORG_NAME:-Wasel}
+      SEED_ORG_TIMEZONE: ${SEED_ORG_TIMEZONE:-UTC}
+    # The binary directly, not through pnpm: this network has no egress and
+    # corepack would try to fetch pnpm from the registry.
+    command: ['./node_modules/.bin/tsx', 'prisma/seed.ts']
+    networks: [internal]
+
   # Opt-in edge. Started only with `--profile edge`, because a server that
   # already terminates TLS (nginx, Traefik, a cloud load balancer) owns :80/:443
   # and a second claimant would either fail to bind or take the existing sites
