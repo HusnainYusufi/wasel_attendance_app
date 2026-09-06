@@ -108,6 +108,10 @@ jobs:
             pnpm exec cap add android
           fi
           pnpm exec cap sync android
+          # @capacitor/geolocation ships an empty AndroidManifest by design and
+          # requires the app to declare the location permissions itself. The
+          # native project is regenerated every run, so this must happen here.
+          node scripts/apply-android-permissions.mjs
 
       - name: Apply version to Gradle
         working-directory: apps/mobile/android/app
@@ -126,6 +130,24 @@ jobs:
           set -euo pipefail
           chmod +x ./gradlew
           ./gradlew --no-daemon assembleDebug
+
+      # A missing location permission produces an APK that builds, installs, and
+      # then cannot ask for GPS — the one thing the product exists to do. Assert
+      # against the actual artifact rather than trusting the step above.
+      - name: Verify APK permissions
+        working-directory: apps/mobile/android/app/build/outputs/apk/debug
+        run: |
+          set -euo pipefail
+          BUILD_TOOLS="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)"
+          PERMS="$("${BUILD_TOOLS}/aapt" dump permissions app-debug.apk)"
+          echo "${PERMS}"
+          for p in android.permission.INTERNET android.permission.ACCESS_FINE_LOCATION android.permission.ACCESS_COARSE_LOCATION; do
+            if ! grep -q "${p}" <<< "${PERMS}"; then
+              echo "::error::${p} is missing from the built APK. Check apps/mobile/scripts/apply-android-permissions.mjs."
+              exit 1
+            fi
+            echo "  ok  ${p}"
+          done
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
