@@ -9,9 +9,17 @@
   place-items: center;
   flex: none;
   border-radius: 28%;
-  background: linear-gradient(140deg, var(--color-accent) 0%, var(--color-accent-active) 100%);
-  color: var(--color-accent-fg);
+  /* Literal white, not a surface token: the shield is a fixed-colour brand asset
+     with a transparent interior, so the tile behind it must not follow the
+     theme or the mark disappears in dark mode. */
+  background: #fff;
   box-shadow: var(--shadow-sm);
+}
+
+.shield {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
 }
 
 .sm {

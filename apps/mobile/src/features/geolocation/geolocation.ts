@@ -156,7 +156,7 @@ async function locateInBrowser(options: LocateOptions): Promise<GeoFix> {
         blocked ? 'permission-blocked' : 'permission-denied',
         blocked
           ? 'Location is blocked for this site in your browser settings.'
-          : 'Wasel needs your location to confirm you are at your site.',
+          : 'Legend Attendance records your location with each punch.',
       );
     }
     if (code === POSITION_ERROR.TIMEOUT) {
@@ -193,7 +193,7 @@ async function locateOnDevice(options: LocateOptions): Promise<GeoFix> {
     } catch {
       throw new GeolocationFailure(
         'permission-denied',
-        'Wasel needs location permission to confirm you are at your site.',
+        'Legend Attendance needs location permission to record where you punched.',
       );
     }
   }
@@ -203,7 +203,7 @@ async function locateOnDevice(options: LocateOptions): Promise<GeoFix> {
     // the recovery has to cover both: the app's own settings page.
     throw new GeolocationFailure(
       'permission-blocked',
-      'Location permission is turned off for Wasel. Enable it in Settings → Apps → Wasel Attendance → Permissions.',
+      'Location permission is turned off. Enable it in Settings → Apps → Legend Attendance → Permissions.',
     );
   }
 

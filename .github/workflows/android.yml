@@ -112,6 +112,9 @@ jobs:
           # requires the app to declare the location permissions itself. The
           # native project is regenerated every run, so this must happen here.
           node scripts/apply-android-permissions.mjs
+          # Capacitor regenerates the project with its placeholder launcher icon
+          # on every run, so the brand has to be reinstalled each time.
+          node scripts/apply-android-icons.mjs
 
       - name: Apply version to Gradle
         working-directory: apps/mobile/android/app
@@ -134,7 +137,7 @@ jobs:
       # A missing location permission produces an APK that builds, installs, and
       # then cannot ask for GPS — the one thing the product exists to do. Assert
       # against the actual artifact rather than trusting the step above.
-      - name: Verify APK permissions
+      - name: Verify APK permissions, name and icon
         working-directory: apps/mobile/android/app/build/outputs/apk/debug
         run: |
           set -euo pipefail
@@ -148,6 +151,21 @@ jobs:
             fi
             echo "  ok  ${p}"
           done
+
+          BADGING="$("${BUILD_TOOLS}/aapt" dump badging app-debug.apk)"
+          echo "${BADGING}" | grep -E "^(package|application-label|application-icon)" || true
+          if ! grep -q "application-label:'Legend Attendance'" <<< "${BADGING}"; then
+            echo "::error::The APK is not labelled 'Legend Attendance'. Check capacitor.config.ts."
+            exit 1
+          fi
+          echo "  ok  application-label"
+          # Capacitor's placeholder is a vector; ours are mipmap PNGs. If the icon
+          # still resolves to the default, the brand never made it into the build.
+          if grep -qE "application-icon-[0-9]+:'res/drawable" <<< "${BADGING}"; then
+            echo "::error::The APK still carries Capacitor's placeholder icon. Check apply-android-icons.mjs."
+            exit 1
+          fi
+          echo "  ok  launcher icon is the Legend shield"
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4

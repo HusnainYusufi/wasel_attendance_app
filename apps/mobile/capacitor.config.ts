@@ -6,8 +6,12 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * lives in this file.
  */
 const config: CapacitorConfig = {
-  appId: 'com.wasel.attendance',
-  appName: 'Wasel Attendance',
+  // Changing appId after a Play Store release is impossible — the package name
+  // is the app's permanent identity there. Rebranding before publication is the
+  // only cheap moment to do it. Note that a device treats a new appId as a
+  // different app: the old build must be uninstalled, not upgraded over.
+  appId: 'com.legend.attendance',
+  appName: 'Legend Attendance',
   webDir: 'dist',
   android: {
     // Keeps the WebView background from flashing white before the app paints.

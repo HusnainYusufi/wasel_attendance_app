@@ -131,7 +131,7 @@ export default function SignInScreen() {
     <div className={styles.screen}>
       <div className={styles.brand}>
         <Logo size="lg" />
-        <h1 className={styles.title}>Wasel Attendance</h1>
+        <h1 className={styles.title}>Legend Attendance</h1>
         <p className={styles.subtitle}>Sign in to check in and out of your site.</p>
       </div>
 
