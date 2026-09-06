@@ -51,6 +51,7 @@ const ORGANIZATION_POLICY_SELECT = {
   dayStartsAt: true,
   lateGraceMinutes: true,
   maxAccuracyMeters: true,
+  enforceGeofence: true,
 } as const satisfies Prisma.OrganizationSelect;
 
 type OrganizationPolicy = Prisma.OrganizationGetPayload<{
@@ -120,7 +121,13 @@ export class AttendanceService {
       // with no active site there is nothing to measure against: the endpoint
       // would answer 422 NO_ACTIVE_SITE. Promising the action anyway is how a
       // shift ends up unclosable by a button that says it can close it.
-      canCheckOut: day.open !== null && sites.length > 0,
+      //
+      // That reasoning is entirely conditional on the fence being enforced. A
+      // tenant that does not enforce one has no gate to fail, so a missing site
+      // must not withdraw the action — otherwise switching enforcement off would
+      // strand every open shift in an organization with no sites, which is
+      // exactly the organization the setting exists for.
+      canCheckOut: day.open !== null && (sites.length > 0 || !organization.enforceGeofence),
       today: visible === null ? null : toAttendanceRecordDto(visible),
       sites: sites.map((site) => ({
         id: site.id,
@@ -130,6 +137,10 @@ export class AttendanceService {
         radiusMeters: site.radiusMeters,
       })),
       maxAccuracyMeters: organization.maxAccuracyMeters,
+      // So the client knows which mode it is in rather than inferring it from a
+      // rejection it has not made yet: with enforcement off the distance panel
+      // is a record of where the user is, not a gate they must pass.
+      enforceGeofence: organization.enforceGeofence,
     };
   }
 
@@ -142,6 +153,9 @@ export class AttendanceService {
    * claim is false the audit row should say `REJECTED_OUT_OF_RANGE`, which is the
    * row an auditor is actually looking for, rather than filing the attempt away
    * as a duplicate tap.
+   *
+   * A tenant with `enforceGeofence: false` runs none of the three location gates
+   * and every one of the state gates. See {@link AttendanceService.resolveLocation}.
    */
   async checkIn(
     auth: AuthContext,
@@ -153,7 +167,7 @@ export class AttendanceService {
     const workDate = businessDateIn(now, organization.timezone, organization.dayStartsAt);
     const attempt = await this.draft(auth, request, client, PunchType.CHECK_IN, workDate);
 
-    const match = await this.enforceLocation(attempt, organization.maxAccuracyMeters);
+    const match = await this.resolveLocation(attempt, organization);
 
     // A pre-check purely for the error message: the unique index below is what
     // actually decides, because a check-then-insert loses the double-tap race.
@@ -174,7 +188,7 @@ export class AttendanceService {
       dayStartsAt: organization.dayStartsAt,
       graceMinutes: organization.lateGraceMinutes,
     });
-    const distanceM = storedMeters(match.distanceM);
+    const distanceM = match === null ? null : storedMeters(match.distanceM);
     const event = this.events.buildData({ ...attempt, outcome: PunchOutcome.ACCEPTED });
 
     try {
@@ -187,7 +201,7 @@ export class AttendanceService {
             userId: auth.userId,
             workDate: workDateToColumn(workDate),
             checkInAt: now,
-            checkInSiteId: match.site.id,
+            checkInSiteId: match?.site.id ?? null,
             checkInLatitude: request.latitude,
             checkInLongitude: request.longitude,
             checkInAccuracyM: request.accuracy,
@@ -205,7 +219,7 @@ export class AttendanceService {
         outcome: PunchOutcome.ACCEPTED,
         type: PunchType.CHECK_IN,
         record: toAttendanceRecordDto(record),
-        site: toSiteSummary(match.site),
+        site: match === null ? null : toSiteSummary(match.site),
         distanceM,
       };
     } catch (error) {
@@ -259,8 +273,8 @@ export class AttendanceService {
       throw await this.rejectShiftTooShort(attempt);
     }
 
-    const match = await this.enforceLocation(attempt, organization.maxAccuracyMeters);
-    const distanceM = storedMeters(match.distanceM);
+    const match = await this.resolveLocation(attempt, organization);
+    const distanceM = match === null ? null : storedMeters(match.distanceM);
     const workedMinutes = minutesBetween(open.checkInAt, now);
     const event = this.events.buildData({ ...attempt, outcome: PunchOutcome.ACCEPTED });
 
@@ -276,7 +290,7 @@ export class AttendanceService {
         },
         data: {
           checkOutAt: now,
-          checkOutSiteId: match.site.id,
+          checkOutSiteId: match?.site.id ?? null,
           checkOutLatitude: request.latitude,
           checkOutLongitude: request.longitude,
           checkOutAccuracyM: request.accuracy,
@@ -300,7 +314,7 @@ export class AttendanceService {
       outcome: PunchOutcome.ACCEPTED,
       type: PunchType.CHECK_OUT,
       record: toAttendanceRecordDto(record),
-      site: toSiteSummary(match.site),
+      site: match === null ? null : toSiteSummary(match.site),
       distanceM,
     };
   }
@@ -372,16 +386,34 @@ export class AttendanceService {
   }
 
   /**
-   * The three location gates, in policy order.
+   * Where the punch happened, and — only for a tenant that enforces a geofence —
+   * whether that is somewhere it is allowed to happen.
    *
-   * Accuracy comes first because a fix reading "at the office ± 3 km" proves
-   * nothing: without this gate the geofence is decorative, since any wide-enough
-   * error radius can be reported from anywhere in the city.
+   * The three gates run in policy order. Accuracy comes first because a fix
+   * reading "at the office ± 3 km" proves nothing: without it the geofence is
+   * decorative, since any wide-enough error radius can be reported from anywhere
+   * in the city.
+   *
+   * **With `enforceGeofence: false` none of them run**, and the return value
+   * becomes what it always described but never had to be — the nearest site and
+   * the distance to it, as a *record*. The accuracy gate stands down with the
+   * other two rather than surviving on its own: its entire purpose was to stop a
+   * wide error radius faking its way inside a fence, and with no fence it only
+   * refuses honest punches from someone whose phone reports ±300 m indoors. The
+   * accuracy is still written to the record and to the audit event, so nothing
+   * an investigator had is lost — it simply stops being a veto.
+   *
+   * Null comes back only in that mode, and only for a tenant with no active
+   * sites at all: there is genuinely nothing to measure from, and inventing a
+   * site to point at would be worse than saying so.
    */
-  private async enforceLocation(
+  private async resolveLocation(
     attempt: PunchAttemptDraft,
-    maxAccuracyMeters: number,
-  ): Promise<GeofenceMatch> {
+    organization: Pick<OrganizationPolicy, 'enforceGeofence' | 'maxAccuracyMeters'>,
+  ): Promise<GeofenceMatch | null> {
+    if (!organization.enforceGeofence) return attempt.nearest;
+
+    const maxAccuracyMeters = organization.maxAccuracyMeters;
     if (attempt.accuracyM > maxAccuracyMeters) {
       throw await this.rejected(
         attempt,

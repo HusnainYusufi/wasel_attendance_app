@@ -31,6 +31,16 @@ import {
 const RIYADH = 'Asia/Riyadh';
 const NEW_YORK = 'America/New_York';
 /** 05:15 UTC is 08:15 on the Riyadh wall clock — the value the sheet must show. */
+/**
+ * 1-based spreadsheet columns for the two instants.
+ *
+ * Named because they moved once already, when the distance and accuracy columns
+ * landed between them: an assertion written against a bare `7` reads as a
+ * passing test about the wrong cell rather than as a failure.
+ */
+const CHECK_IN_COLUMN = 5;
+const CHECK_OUT_COLUMN = 9;
+
 const CHECK_IN_UTC = 'T05:15:00.000Z';
 const CHECK_OUT_UTC = 'T14:30:00.000Z';
 const WALL_CLOCK_IN = '08:15';
@@ -294,8 +304,13 @@ describe('admin attendance report and export', () => {
         'Email',
         `Check-in (${RIYADH})`,
         'Check-in site',
+        'Check-in distance from site',
+        'Check-in GPS accuracy (radius)',
         `Check-out (${RIYADH})`,
         'Check-out site',
+        'Check-out distance from site',
+        'Check-out GPS accuracy (radius)',
+        'Outside geofence',
         'Status',
         'Worked minutes',
         'Late minutes',
@@ -303,8 +318,78 @@ describe('admin attendance report and export', () => {
 
       const workbook = await downloadXlsx(fullRange);
       const header = workbook.getWorksheet('Attendance')?.getRow(1);
-      expect(cellText(header?.getCell(5).value)).toBe(`Check-in (${RIYADH})`);
-      expect(cellText(header?.getCell(7).value)).toBe(`Check-out (${RIYADH})`);
+      expect(cellText(header?.getCell(CHECK_IN_COLUMN).value)).toBe(`Check-in (${RIYADH})`);
+      expect(cellText(header?.getCell(CHECK_OUT_COLUMN).value)).toBe(`Check-out (${RIYADH})`);
+    });
+
+    it('records where each punch happened and how sure the device was', async () => {
+      const employee = await createUser(ctx, {
+        organizationId: admin.organization.id,
+        fullName: 'Far Away',
+        employeeCode: 'FA-1',
+      });
+      const day = workDay(0);
+      await seedAttendanceRecord(ctx, {
+        organizationId: admin.organization.id,
+        userId: employee.user.id,
+        siteId,
+        workDate: day,
+        // 791 km out — the distance the whole non-enforcing mode exists for —
+        // against a fixture site whose radius is 150 m.
+        checkInDistanceM: 791_043.2,
+        checkInAccuracyM: 2400,
+        checkOutDistanceM: 12,
+        checkOutAccuracyM: 9,
+      });
+
+      const csv = await downloadCsv(`from=${day}&to=${day}`);
+      const row = csv.rows[0] ?? [];
+      expect(row[6]).toBe('791 km');
+      expect(row[7]).toBe('2.4 km');
+      expect(row[10]).toBe('12 m');
+      expect(row[11]).toBe('9 m');
+      // Only the check-in was outside its fence, and the column says which.
+      expect(row[12]).toBe('Check-in');
+
+      // The workbook keeps the metres as real numbers so the column can be
+      // sorted; the column's number format is what renders them as "791 km".
+      const sheet = (await downloadXlsx(`from=${day}&to=${day}`)).getWorksheet('Attendance');
+      const data = sheet?.getRow(2);
+      expect(data?.getCell(7).value).toBe(791_043.2);
+      expect(data?.getCell(8).value).toBe(2400);
+      expect(cellText(data?.getCell(13).value)).toBe('Check-in');
+      expect(sheet?.getColumn(7).style.numFmt).toContain('km');
+    });
+
+    it('leaves the location columns empty for a record with no site', async () => {
+      const employee = await createUser(ctx, {
+        organizationId: admin.organization.id,
+        fullName: 'No Site',
+        employeeCode: 'NS-1',
+      });
+      const day = workDay(0);
+      await seedAttendanceRecord(ctx, {
+        organizationId: admin.organization.id,
+        userId: employee.user.id,
+        siteId: null,
+        workDate: day,
+        checkInDistanceM: null,
+        checkOutSiteId: null,
+        checkOutDistanceM: null,
+      });
+
+      const csv = await downloadCsv(`from=${day}&to=${day}`);
+      const row = csv.rows[0] ?? [];
+      expect(row[5]).toBe('');
+      expect(row[6]).toBe('');
+      expect(row[9]).toBe('');
+      expect(row[10]).toBe('');
+      // Blank, not flagged: a fence that does not exist cannot be outside of.
+      expect(row[12]).toBe('');
+      // The accuracy is recorded whatever else is missing — it is a property of
+      // the device, not of the organization's sites.
+      expect(row[7]).toBe('12 m');
+      expect(row).toHaveLength(csv.header.length);
     });
 
     it('renders times as the local wall clock in both formats', async () => {
@@ -324,16 +409,18 @@ describe('admin attendance report and export', () => {
       });
 
       const csv = await downloadCsv(`from=${day}&to=${day}`);
-      expect(csv.rows[0]?.[4]).toBe(`${day} ${WALL_CLOCK_IN}`);
-      expect(csv.rows[0]?.[6]).toBe(`${day} ${WALL_CLOCK_OUT}`);
+      expect(csv.rows[0]?.[CHECK_IN_COLUMN - 1]).toBe(`${day} ${WALL_CLOCK_IN}`);
+      expect(csv.rows[0]?.[CHECK_OUT_COLUMN - 1]).toBe(`${day} ${WALL_CLOCK_OUT}`);
 
       const workbook = await downloadXlsx(`from=${day}&to=${day}`);
       const row = workbook.getWorksheet('Attendance')?.getRow(2);
       // A real date cell — so Excel sorts and subtracts it — whose UTC fields
       // carry the Riyadh wall clock, because xlsx has nowhere to record a zone.
-      expect(row?.getCell(5).value).toBeInstanceOf(Date);
-      expect((row?.getCell(5).value as Date).toISOString()).toBe(`${day}T${WALL_CLOCK_IN}:00.000Z`);
-      expect((row?.getCell(7).value as Date).toISOString()).toBe(
+      expect(row?.getCell(CHECK_IN_COLUMN).value).toBeInstanceOf(Date);
+      expect((row?.getCell(CHECK_IN_COLUMN).value as Date).toISOString()).toBe(
+        `${day}T${WALL_CLOCK_IN}:00.000Z`,
+      );
+      expect((row?.getCell(CHECK_OUT_COLUMN).value as Date).toISOString()).toBe(
         `${day}T${WALL_CLOCK_OUT}:00.000Z`,
       );
       expect(row?.getCell(1).value).toBeInstanceOf(Date);
@@ -498,12 +585,16 @@ describe('admin attendance report and export', () => {
       // The contradiction itself: the work date is untouched, and the instant is
       // now rendered on the previous calendar day.
       expect(csv.rows[0]?.[0]).toBe(WORK_DATE);
-      expect(csv.rows[0]?.[4]).toBe('2026-03-01 17:30');
+      expect(csv.rows[0]?.[CHECK_IN_COLUMN - 1]).toBe('2026-03-01 17:30');
 
       // The CSV is a bare rectangle by design, so the column title is the only
       // place in it a sentence can go without breaking every parser.
-      expect(csv.header[4]).toBe(`Check-in (${NEW_YORK}; ${TIMEZONE_CHANGED_NOTE})`);
-      expect(csv.header[6]).toBe(`Check-out (${NEW_YORK}; ${TIMEZONE_CHANGED_NOTE})`);
+      expect(csv.header[CHECK_IN_COLUMN - 1]).toBe(
+        `Check-in (${NEW_YORK}; ${TIMEZONE_CHANGED_NOTE})`,
+      );
+      expect(csv.header[CHECK_OUT_COLUMN - 1]).toBe(
+        `Check-out (${NEW_YORK}; ${TIMEZONE_CHANGED_NOTE})`,
+      );
       expect(csv.header[0]).toBe('Work date');
       expect(csv.rows[0]).toHaveLength(csv.header.length);
 
@@ -511,7 +602,7 @@ describe('admin attendance report and export', () => {
       // one range that disagree is a payroll dispute with two answers.
       const workbook = await downloadXlsx(RANGE);
       const header = workbook.getWorksheet('Attendance')?.getRow(1);
-      expect(cellText(header?.getCell(5).value)).toBe(
+      expect(cellText(header?.getCell(CHECK_IN_COLUMN).value)).toBe(
         `Check-in (${NEW_YORK}; ${TIMEZONE_CHANGED_NOTE})`,
       );
     });

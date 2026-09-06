@@ -96,8 +96,13 @@ export default function HomeScreen() {
       const verb = result.type === PunchType.CHECK_IN ? 'Checked in' : 'Checked out';
       setNotice({
         tone: 'success',
-        title: `${verb} at ${result.site.name}`,
-        description: `Recorded ${formatDistance(result.distanceM)} from the site centre.`,
+        // A tenant with no sites has nothing to name, and "Checked in at null"
+        // is the kind of receipt that makes a user distrust the whole screen.
+        title: result.site ? `${verb} at ${result.site.name}` : verb,
+        description:
+          result.site && result.distanceM !== null
+            ? `Recorded ${formatDistance(result.distanceM)} from ${result.site.name}.`
+            : 'Your location was recorded with the punch.',
       });
       // No toast: the banner above already says this, in the exact spot the
       // user is looking, and the toast viewport sits on top of the punch dock.
@@ -204,8 +209,11 @@ export default function HomeScreen() {
   // have nothing to measure against — and a disabled button claiming the day was
   // finished would be a lie about a shift that is still running. Name the action
   // that is unavailable, and say underneath it why it is.
+  //
+  // None of it applies to a tenant that does not enforce a geofence: there is no
+  // site to be missing, because a punch there is accepted wherever it is taken.
   const idle =
-    dayClosed || status.sites.length > 0
+    dayClosed || status.sites.length > 0 || !status.enforceGeofence
       ? { label: 'Done for today', hint: 'You have checked in and out. The record is above.' }
       : {
           label: openShift ? 'Check out' : 'Check in',
@@ -220,6 +228,7 @@ export default function HomeScreen() {
         geo={geo}
         sites={status.sites}
         maxAccuracyMeters={status.maxAccuracyMeters}
+        enforceGeofence={status.enforceGeofence}
         isAdmin={isAdmin}
       />
 
@@ -263,7 +272,11 @@ export default function HomeScreen() {
         )}
 
         <p className={styles.dockHint}>
-          {primary ? 'Your location is checked the moment you tap.' : idle.hint}
+          {primary
+            ? status.enforceGeofence
+              ? 'Your location is checked the moment you tap.'
+              : 'Your location is recorded the moment you tap.'
+            : idle.hint}
         </p>
       </div>
     </>,

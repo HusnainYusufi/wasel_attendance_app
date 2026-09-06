@@ -64,12 +64,12 @@ enum AttendanceStatus {
 // ---------------------------------------------------------------------------
 
 model Organization {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String   @db.VarChar(120)
-  slug      String   @unique @db.VarChar(64)
+  id   String @id @default(uuid()) @db.Uuid
+  name String @db.VarChar(120)
+  slug String @unique @db.VarChar(64)
 
   /// IANA timezone (e.g. "Asia/Riyadh"). Authoritative for every workDate boundary.
-  timezone  String   @default("UTC") @db.VarChar(64)
+  timezone String @default("UTC") @db.VarChar(64)
 
   // --- Workday policy ---------------------------------------------------
   /// Local wall-clock start of the workday, "HH:mm". Drives LATE classification.
@@ -89,7 +89,25 @@ model Organization {
   lateGraceMinutes  Int    @default(15)
   /// Reject punches whose GPS accuracy radius exceeds this, in metres.
   /// A 2 km accuracy fix "inside" a 150 m geofence proves nothing.
+  /// Only consulted while `enforceGeofence` is true — see below.
   maxAccuracyMeters Int    @default(100)
+
+  /// Whether a punch outside every geofence is refused.
+  ///
+  /// `true` is the original behaviour and the default, so no existing tenant
+  /// changes meaning when this column appears. `false` demotes location from a
+  /// *gate* to a *record*: coordinates, accuracy, the nearest site and the
+  /// distance to it are still stored on every punch, and none of them can refuse
+  /// one. It exists because a fence is the wrong instrument for a workforce that
+  /// is legitimately hundreds of kilometres from the nearest office — one of this
+  /// product's users is 791 km away — and the alternative is that those employees
+  /// cannot record attendance at all.
+  ///
+  /// It stands down `maxAccuracyMeters` too. That gate's only job was to stop a
+  /// wide error radius faking its way *inside* a fence; with no fence to fake, it
+  /// is pure friction against someone whose phone reports ±300 m indoors. The
+  /// accuracy is still recorded on both the record and the event.
+  enforceGeofence Boolean @default(true)
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
@@ -108,8 +126,8 @@ model Organization {
 // ---------------------------------------------------------------------------
 
 model User {
-  id             String     @id @default(uuid()) @db.Uuid
-  organizationId String     @db.Uuid
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
 
   /// Stored lowercased+trimmed. Unique per organization, not globally: the same
   /// human may legitimately exist in two tenants.
@@ -193,10 +211,10 @@ model Site {
   updatedAt DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
 
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  checkInRecords    AttendanceRecord[] @relation("CheckInSite")
-  checkOutRecords   AttendanceRecord[] @relation("CheckOutSite")
-  attendanceEvents  AttendanceEvent[]
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checkInRecords   AttendanceRecord[] @relation("CheckInSite")
+  checkOutRecords  AttendanceRecord[] @relation("CheckOutSite")
+  attendanceEvents AttendanceEvent[]
 
   @@unique([organizationId, name])
   @@index([organizationId, isActive])
@@ -218,21 +236,25 @@ model AttendanceRecord {
   /// Local calendar date in the organization's timezone.
   workDate DateTime @db.Date
 
-  checkInAt          DateTime @db.Timestamptz(3)
-  checkInSiteId      String   @db.Uuid
-  checkInLatitude    Float
-  checkInLongitude   Float
-  checkInAccuracyM   Float
-  checkInDistanceM   Float
+  checkInAt        DateTime @db.Timestamptz(3)
+  /// The site the punch was measured against. Null when the organization had no
+  /// active site — only reachable while `enforceGeofence` is false, because the
+  /// fence cannot be enforced when there is nothing to enforce it against.
+  checkInSiteId    String?  @db.Uuid
+  checkInLatitude  Float
+  checkInLongitude Float
+  checkInAccuracyM Float
+  /// Metres to `checkInSiteId`. Null exactly when that site is null.
+  checkInDistanceM Float?
 
-  checkOutAt         DateTime? @db.Timestamptz(3)
-  checkOutSiteId     String?   @db.Uuid
-  checkOutLatitude   Float?
-  checkOutLongitude  Float?
-  checkOutAccuracyM  Float?
-  checkOutDistanceM  Float?
+  checkOutAt        DateTime? @db.Timestamptz(3)
+  checkOutSiteId    String?   @db.Uuid
+  checkOutLatitude  Float?
+  checkOutLongitude Float?
+  checkOutAccuracyM Float?
+  checkOutDistanceM Float?
 
-  status       AttendanceStatus @default(PRESENT)
+  status        AttendanceStatus @default(PRESENT)
   /// Whole minutes between check-in and check-out. Null until checked out.
   workedMinutes Int?
   /// Minutes past (workdayStart + grace). 0 when on time.
@@ -243,7 +265,7 @@ model AttendanceRecord {
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  checkInSite  Site         @relation("CheckInSite", fields: [checkInSiteId], references: [id])
+  checkInSite  Site?        @relation("CheckInSite", fields: [checkInSiteId], references: [id])
   checkOutSite Site?        @relation("CheckOutSite", fields: [checkOutSiteId], references: [id])
 
   @@unique([userId, workDate])
@@ -263,16 +285,16 @@ model AttendanceEvent {
   organizationId String @db.Uuid
   userId         String @db.Uuid
 
-  type      PunchType
-  outcome   PunchOutcome
-  workDate  DateTime     @db.Date
+  type     PunchType
+  outcome  PunchOutcome
+  workDate DateTime     @db.Date
 
-  latitude   Float
-  longitude  Float
-  accuracyM  Float
+  latitude  Float
+  longitude Float
+  accuracyM Float
   /// Distance to the nearest active site, metres. Null when the org has no sites.
-  distanceM  Float?
-  siteId     String? @db.Uuid
+  distanceM Float?
+  siteId    String? @db.Uuid
 
   /// Client-supplied device timestamp, for detecting clock tampering. Never trusted
   /// for workDate computation — the server clock is authoritative.

@@ -18,6 +18,7 @@ import {
   AttendanceStatus,
   ExportFormat,
   EXPORT_MAX_RANGE_DAYS,
+  PunchType,
   Role,
   SITE_RADIUS_MAX_M,
   SITE_RADIUS_MIN_M,
@@ -157,6 +158,17 @@ export const updateOrganizationRequestSchema = z
     dayStartsAt: timeOfDaySchema.optional(),
     lateGraceMinutes: z.number().int().min(0).max(720).optional(),
     maxAccuracyMeters: z.number().int().min(10).max(ACCURACY_CEILING_M).optional(),
+    /**
+     * Whether a punch outside every geofence is refused.
+     *
+     * Switching it off turns location from a gate into a record: coordinates,
+     * accuracy, the nearest site and the distance to it are still stored on
+     * every punch, and none of them can refuse one. It exists because a fence
+     * is the wrong tool for a workforce that is legitimately hundreds of
+     * kilometres from the nearest office — the alternative being that those
+     * employees cannot record attendance at all.
+     */
+    enforceGeofence: z.boolean().optional(),
   })
   .refine((v) => Object.values(v).some((x) => x !== undefined), {
     message: 'Provide at least one field to update',
@@ -178,6 +190,13 @@ export const organizationSchema = z.object({
   dayStartsAt: z.string(),
   lateGraceMinutes: z.number().int(),
   maxAccuracyMeters: z.number().int(),
+  /**
+   * Whether punches outside every geofence are refused. `true` preserves the
+   * original behaviour; `false` makes location a recorded fact rather than a
+   * precondition, and also stands down the accuracy gate, which only ever
+   * existed to stop a wide fix faking its way *inside* a fence.
+   */
+  enforceGeofence: z.boolean(),
 });
 export type OrganizationDto = z.infer<typeof organizationSchema>;
 
@@ -218,9 +237,27 @@ export const reportRowSchema = z.object({
   userEmail: z.string(),
   employeeCode: z.string().nullable(),
   checkInAt: z.string(),
-  checkInSiteName: z.string(),
+  /** Null when the tenant had no site to measure the punch against. */
+  checkInSiteName: z.string().nullable(),
+  /** Metres from the check-in site's centre. Null when there was no site. */
+  checkInDistanceM: z.number().nullable(),
+  /** The device's reported error radius at check-in, metres. Always recorded. */
+  checkInAccuracyM: z.number(),
   checkOutAt: z.string().nullable(),
   checkOutSiteName: z.string().nullable(),
+  checkOutDistanceM: z.number().nullable(),
+  checkOutAccuracyM: z.number().nullable(),
+  /**
+   * The punches that landed outside their own site's radius.
+   *
+   * Derived on the server rather than left to each reader, because the radius
+   * lives on the site and the distance on the record: a client that joined them
+   * itself would be reimplementing the comparison in every surface that shows a
+   * report, and the two copies would eventually disagree. Empty when both
+   * punches were inside, and empty for a punch with no site — a fence that does
+   * not exist cannot be outside of.
+   */
+  outOfRange: z.array(z.enum([PunchType.CHECK_IN, PunchType.CHECK_OUT])),
   status: z.enum([AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.INCOMPLETE]),
   workedMinutes: z.number().int().nullable(),
   lateMinutes: z.number().int(),

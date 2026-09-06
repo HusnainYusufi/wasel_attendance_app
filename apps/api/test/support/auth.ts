@@ -50,6 +50,8 @@ export interface CreateOrganizationOptions {
   dayStartsAt?: string;
   lateGraceMinutes?: number;
   maxAccuracyMeters?: number;
+  /** Defaults to the column's own `true`, which is the pre-existing behaviour. */
+  enforceGeofence?: boolean;
 }
 
 export async function createOrganization(
@@ -73,6 +75,9 @@ export async function createOrganization(
       ...(options.maxAccuracyMeters === undefined
         ? {}
         : { maxAccuracyMeters: options.maxAccuracyMeters }),
+      ...(options.enforceGeofence === undefined
+        ? {}
+        : { enforceGeofence: options.enforceGeofence }),
     },
   });
 }

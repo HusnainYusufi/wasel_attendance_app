@@ -54,6 +54,10 @@ const POLICY = {
   dayStartsAt: '00:00',
   lateGraceMinutes: 15,
   maxAccuracyMeters: 100,
+  // The default, and the behaviour every assertion in this file was written
+  // against. The non-enforcing tenant is exercised in its own describe block
+  // below, by overriding this.
+  enforceGeofence: true,
 };
 
 const SITE_SUMMARY = { id: HQ.id, name: HQ.name };
@@ -669,6 +673,9 @@ describe('status', () => {
       canCheckOut: false,
       today: null,
       maxAccuracyMeters: 100,
+      // Carried so the client knows which mode it is in without having to
+      // provoke a rejection to find out.
+      enforceGeofence: true,
     });
     expect(status.sites).toEqual([HQ]);
   });
@@ -691,6 +698,21 @@ describe('status', () => {
     // anyway left the shift unclosable by the control that claimed to close it.
     expect(status).toMatchObject({ canCheckIn: false, canCheckOut: false });
     expect(status.today).not.toBeNull();
+  });
+
+  it('keeps the check-out when the tenant does not enforce a geofence', async () => {
+    const h = harness({
+      existing: [recordRow()],
+      sites: [],
+      policy: { enforceGeofence: false },
+    });
+
+    const status = await h.service.status(AUTH);
+
+    // The withdrawal above is entirely about a gate the punch would fail. There
+    // is no such gate here, so removing the button would only strand the open
+    // shift — in exactly the organization this mode exists for.
+    expect(status).toMatchObject({ canCheckOut: true, enforceGeofence: false });
   });
 
   it('closes both buttons once the day is finished', async () => {

@@ -66,8 +66,19 @@ export const attendanceRecordSchema = z.object({
   /** Local calendar date, YYYY-MM-DD, in the organization timezone. */
   workDate: z.string(),
   checkInAt: z.string(),
-  checkInSite: siteSummarySchema,
-  checkInDistanceM: z.number(),
+  /**
+   * The site the punch was measured against, or `null`.
+   *
+   * Nullable for the same reason `checkOutSite` always was: a site is a *point
+   * of reference*, not a precondition. An organization that does not enforce a
+   * geofence may legitimately have no sites at all, and a punch made in that
+   * tenant is a complete, valid record with nowhere to measure from. Forcing a
+   * site here would either forbid that tenant from recording attendance or
+   * require inventing a site nobody works at.
+   */
+  checkInSite: siteSummarySchema.nullable(),
+  /** Metres from {@link attendanceRecordSchema.checkInSite}; `null` when there was none. */
+  checkInDistanceM: z.number().nullable(),
   checkOutAt: z.string().nullable(),
   checkOutSite: siteSummarySchema.nullable(),
   checkOutDistanceM: z.number().nullable(),
@@ -99,6 +110,15 @@ export const attendanceStatusSchema = z.object({
     }),
   ),
   maxAccuracyMeters: z.number().int(),
+  /**
+   * Whether the tenant refuses punches taken outside a geofence.
+   *
+   * Carried so the client knows which mode it is in rather than inferring it
+   * from a rejection it has not made yet. When `false` the distance panel is a
+   * *record* of where the user is, not a gate they have to pass, and the punch
+   * button is never withheld for being far away or for an imprecise fix.
+   */
+  enforceGeofence: z.boolean(),
 });
 export type AttendanceStatusDto = z.infer<typeof attendanceStatusSchema>;
 
@@ -106,8 +126,14 @@ export const punchResponseSchema = z.object({
   outcome: z.enum([PunchOutcome.ACCEPTED]),
   type: z.enum([PunchType.CHECK_IN, PunchType.CHECK_OUT]),
   record: attendanceRecordSchema,
-  /** Site the punch was matched to, and how far away the device was. */
-  site: siteSummarySchema,
-  distanceM: z.number(),
+  /**
+   * Site the punch was matched to, and how far away the device was.
+   *
+   * Both `null` together, and only when the tenant does not enforce a geofence
+   * and has no sites to measure against — there is then no nearest site, and
+   * saying so is more honest than naming an arbitrary one.
+   */
+  site: siteSummarySchema.nullable(),
+  distanceM: z.number().nullable(),
 });
 export type PunchResponse = z.infer<typeof punchResponseSchema>;

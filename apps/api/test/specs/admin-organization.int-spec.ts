@@ -46,6 +46,8 @@ describe('admin organization', () => {
         dayStartsAt: '00:00',
         lateGraceMinutes: 15,
         maxAccuracyMeters: 100,
+        // The default preserves what every tenant did before the column existed.
+        enforceGeofence: true,
       });
     });
 
@@ -97,6 +99,36 @@ describe('admin organization', () => {
       expect(entry.metadata).toMatchObject({ previousDayStartsAt: '00:00', dayStartsAt: '20:00' });
     });
 
+    it('turns the geofence from a gate into a record, and back', async () => {
+      const off = await admin
+        .patch('/admin/organization')
+        .send({ enforceGeofence: false })
+        .expect(200);
+      expect(off.body.enforceGeofence).toBe(false);
+
+      const on = await admin
+        .patch('/admin/organization')
+        .send({ enforceGeofence: true })
+        .expect(200);
+      expect(on.body.enforceGeofence).toBe(true);
+    });
+
+    it('records the geofence switch in the audit log, with the value it replaced', async () => {
+      await admin.patch('/admin/organization').send({ enforceGeofence: false }).expect(200);
+
+      const entry = await ctx.prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: admin.organization.id },
+        orderBy: { createdAt: 'desc' },
+      });
+      // A month of out-of-range check-ins in a report is explained entirely by
+      // *when* this was switched, so the log has to answer it without a reader
+      // diffing every settings edit the tenant ever made.
+      expect(entry.metadata).toMatchObject({
+        previousEnforceGeofence: 'true',
+        enforceGeofence: 'false',
+      });
+    });
+
     it('rejects a window that ends before it begins', async () => {
       const response = await admin
         .patch('/admin/organization')
@@ -125,6 +157,7 @@ describe('admin organization', () => {
       [{ lateGraceMinutes: -1 }, 'lateGraceMinutes'],
       [{ maxAccuracyMeters: ACCURACY_CEILING_M + 1 }, 'maxAccuracyMeters'],
       [{ maxAccuracyMeters: 5 }, 'maxAccuracyMeters'],
+      [{ enforceGeofence: 'off' }, 'enforceGeofence'],
       [{}, ''],
     ])('rejects an invalid patch (%#)', async (payload, field) => {
       const response = await admin.patch('/admin/organization').send(payload).expect(400);

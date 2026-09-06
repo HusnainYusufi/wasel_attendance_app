@@ -42,12 +42,17 @@ export function seedSite(
 export interface SeedRecordOptions {
   organizationId: string;
   userId: string;
-  siteId: string;
+  /** Null for a tenant that does not enforce a geofence and has no sites. */
+  siteId: string | null;
   /** `YYYY-MM-DD` in the organization's zone. */
   workDate: string;
   checkInAt?: Date;
+  checkInAccuracyM?: number;
+  checkInDistanceM?: number | null;
   checkOutAt?: Date | null;
   checkOutSiteId?: string | null;
+  checkOutAccuracyM?: number;
+  checkOutDistanceM?: number | null;
   status?: AttendanceStatus;
   workedMinutes?: number | null;
   lateMinutes?: number;
@@ -73,8 +78,8 @@ export function seedAttendanceRecord(
       checkInSiteId: options.siteId,
       checkInLatitude: 24.7136,
       checkInLongitude: 46.6753,
-      checkInAccuracyM: 12,
-      checkInDistanceM: 20,
+      checkInAccuracyM: options.checkInAccuracyM ?? 12,
+      checkInDistanceM: options.checkInDistanceM === undefined ? 20 : options.checkInDistanceM,
       checkOutAt,
       checkOutSiteId: checkOutAt === null ? null : (options.checkOutSiteId ?? options.siteId),
       ...(checkOutAt === null
@@ -82,8 +87,9 @@ export function seedAttendanceRecord(
         : {
             checkOutLatitude: 24.7136,
             checkOutLongitude: 46.6753,
-            checkOutAccuracyM: 12,
-            checkOutDistanceM: 20,
+            checkOutAccuracyM: options.checkOutAccuracyM ?? 12,
+            checkOutDistanceM:
+              options.checkOutDistanceM === undefined ? 20 : options.checkOutDistanceM,
           }),
       status:
         options.status ??

@@ -26,6 +26,15 @@
   color: var(--color-warning-text);
 }
 
+/**
+ * The tone for a panel that reports rather than judges. Deliberately the brand
+ * accent and not amber: with no geofence to fail there is nothing here for the
+ * user to act on, and a warning colour would say otherwise.
+ */
+.iconInfo {
+  color: var(--color-accent);
+}
+
 .headlineText {
   display: flex;
   flex-direction: column;

@@ -4,6 +4,14 @@ import { formatDuration, formatTime, formatWorkDate } from '../../lib/datetime';
 import { StatusBadge } from './StatusBadge';
 import styles from '../../routes/screens/HomeScreen.module.css';
 
+/**
+ * What stands in for a site name when the punch had none.
+ *
+ * A tenant that does not enforce a geofence may have no sites at all, and a
+ * blank here reads as a rendering failure rather than as the fact it is.
+ */
+const NO_SITE = 'No site configured';
+
 export interface TodayCardProps {
   record: AttendanceRecordDto;
   timezone: string;
@@ -30,7 +38,7 @@ export function TodayCard({ record, timezone, currentWorkDate }: TodayCardProps)
       <div className={styles.record}>
         <CardHeader
           title={isCarriedOver ? `Shift from ${formatWorkDate(record.workDate)}` : 'Today'}
-          subtitle={record.checkInSite.name}
+          subtitle={record.checkInSite?.name ?? NO_SITE}
           action={<StatusBadge status={record.status} />}
         />
 
@@ -38,8 +46,10 @@ export function TodayCard({ record, timezone, currentWorkDate }: TodayCardProps)
           <div className={styles.punch}>
             <span className={styles.punchLabel}>Checked in</span>
             <span className={styles.punchTime}>{formatTime(record.checkInAt, timezone)}</span>
-            <span className={styles.punchSite} title={record.checkInSite.name}>
-              {record.checkInSite.name} · {formatDistance(record.checkInDistanceM)}
+            <span className={styles.punchSite} title={record.checkInSite?.name ?? NO_SITE}>
+              {record.checkInSite && record.checkInDistanceM !== null
+                ? `${record.checkInSite.name} · ${formatDistance(record.checkInDistanceM)}`
+                : NO_SITE}
             </span>
           </div>
 

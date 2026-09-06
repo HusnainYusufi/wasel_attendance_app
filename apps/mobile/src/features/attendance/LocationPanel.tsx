@@ -21,6 +21,15 @@ export interface LocationPanelProps {
   geo: UseGeolocation;
   sites: readonly GeofenceSite[];
   maxAccuracyMeters: number;
+  /**
+   * Whether the server will refuse a punch taken outside a fence.
+   *
+   * `false` changes what this panel *is*, not merely how it is worded: it stops
+   * being a check the user has to pass and becomes a statement of what is about
+   * to be written down. Nothing on it may then read as a warning, because there
+   * is nothing for the user to do about any of it.
+   */
+  enforceGeofence: boolean;
   isAdmin: boolean;
 }
 
@@ -55,9 +64,21 @@ const ERROR_TITLE: Record<GeoErrorKind, string> = {
  * enforced. Recomputing it here with a slightly different earth radius would
  * produce the worst possible bug in this app: a screen that says "12 m away"
  * next to a rejection that says "out of range".
+ *
+ * With `enforceGeofence: false` the same numbers are shown and none of them is a
+ * verdict. The geofence bar, the amber accuracy banner and the "no site
+ * configured" warning all disappear — each of them exists to answer *may I punch
+ * here?*, a question that no longer has a wrong answer — and what is left is the
+ * honest statement of what the punch will record.
  */
-export function LocationPanel({ geo, sites, maxAccuracyMeters, isAdmin }: LocationPanelProps) {
-  if (sites.length === 0) {
+export function LocationPanel({
+  geo,
+  sites,
+  maxAccuracyMeters,
+  enforceGeofence,
+  isAdmin,
+}: LocationPanelProps) {
+  if (sites.length === 0 && enforceGeofence) {
     return (
       <Banner
         tone="warning"
@@ -79,6 +100,8 @@ export function LocationPanel({ geo, sites, maxAccuracyMeters, isAdmin }: Locati
   }
 
   if (geo.status === 'error' && geo.errorKind) {
+    // Still a warning with the fence off: the punch is accepted from anywhere,
+    // but only if the device can say where "anywhere" was.
     const retryLabel = RETRY_LABEL[geo.errorKind];
     return (
       <Banner
@@ -112,10 +135,8 @@ export function LocationPanel({ geo, sites, maxAccuracyMeters, isAdmin }: Locati
   }
 
   const nearest = findNearestSite(geo.fix, sites);
-  if (!nearest) return null;
-
   const accurate = geo.fix.accuracy <= maxAccuracyMeters;
-  const within = nearest.withinFence;
+  const within = nearest?.withinFence ?? false;
   const ok = within && accurate;
 
   return (
@@ -123,44 +144,47 @@ export function LocationPanel({ geo, sites, maxAccuracyMeters, isAdmin }: Locati
       <div className={styles.panel}>
         <div className={styles.headline}>
           <span
-            className={cx(styles.headlineIcon, ok ? styles.iconOk : styles.iconWarn)}
+            className={cx(
+              styles.headlineIcon,
+              !enforceGeofence ? styles.iconInfo : ok ? styles.iconOk : styles.iconWarn,
+            )}
             aria-hidden="true"
           >
-            {ok ? <CheckIcon size="1.35rem" /> : <MapPinIcon size="1.35rem" />}
+            {enforceGeofence && ok ? <CheckIcon size="1.35rem" /> : <MapPinIcon size="1.35rem" />}
           </span>
           <div className={styles.headlineText}>
-            <p className={styles.title}>
-              {within
-                ? `You are at ${nearest.site.name}`
-                : `${formatDistance(nearest.distanceM)} from ${nearest.site.name}`}
-            </p>
-            <p className={styles.detail}>
-              {within
-                ? `${formatDistance(nearest.distanceM)} from the centre — inside the ${formatDistance(nearest.site.radiusMeters)} geofence.`
-                : `This site accepts punches within ${formatDistance(nearest.site.radiusMeters)}.`}
-            </p>
+            <p className={styles.title}>{headline(nearest)}</p>
+            <p className={styles.detail}>{detail(nearest, enforceGeofence)}</p>
           </div>
         </div>
 
-        <RangeMeter
-          distanceM={nearest.distanceM}
-          radiusM={nearest.site.radiusMeters}
-          siteName={nearest.site.name}
-        />
+        {/* The meter draws distance against the fence, which only answers "am I
+            close enough?". With no fence to be close enough to, a marker pinned
+            far past the band would read as a failure the user cannot fix. */}
+        {enforceGeofence && nearest ? (
+          <RangeMeter
+            distanceM={nearest.distanceM}
+            radiusM={nearest.site.radiusMeters}
+            siteName={nearest.site.name}
+          />
+        ) : null}
 
-        {accurate ? null : (
+        {enforceGeofence && !accurate ? (
           <Banner
             tone="warning"
             icon={<AlertIcon size="1.15rem" />}
             title={`Your fix is only accurate to ${formatDistance(geo.fix.accuracy)}`}
             description={`Punches need ${formatDistance(maxAccuracyMeters)} or better. Step outside, away from tall buildings, and try again.`}
           />
-        )}
+        ) : null}
 
         <div className={styles.footerRow}>
           <span className={styles.accuracy}>
-            Accurate to {formatDistance(geo.fix.accuracy)} · limit{' '}
-            {formatDistance(maxAccuracyMeters)}
+            {/* Deliberately parallel to the enforcing form: same sentence, and the
+                one word that changes is the one that matters. */}
+            {enforceGeofence
+              ? `Accurate to ${formatDistance(geo.fix.accuracy)} · limit ${formatDistance(maxAccuracyMeters)}`
+              : `Accurate to ${formatDistance(geo.fix.accuracy)} · no limit`}
           </span>
           <Button
             variant="ghost"
@@ -174,4 +198,27 @@ export function LocationPanel({ geo, sites, maxAccuracyMeters, isAdmin }: Locati
       </div>
     </Card>
   );
+}
+
+type Nearest = ReturnType<typeof findNearestSite>;
+
+/** The one line that says where the user is. */
+function headline(nearest: Nearest): string {
+  if (nearest === null) return 'No site to measure from';
+  if (nearest.withinFence) return `You are at ${nearest.site.name}`;
+  return `${formatDistance(nearest.distanceM)} from ${nearest.site.name}`;
+}
+
+/** …and the one under it that says what that means for the punch. */
+function detail(nearest: Nearest, enforceGeofence: boolean): string {
+  if (!enforceGeofence) {
+    return nearest === null
+      ? 'Your coordinates and accuracy are still recorded with the punch.'
+      : 'Recorded with your punch. Punches here are accepted from anywhere.';
+  }
+  if (nearest === null) return 'Your coordinates are recorded with the punch.';
+  // Enforcing, and a site exists: the fence is the point of the sentence.
+  return nearest.withinFence
+    ? `${formatDistance(nearest.distanceM)} from the centre — inside the ${formatDistance(nearest.site.radiusMeters)} geofence.`
+    : `This site accepts punches within ${formatDistance(nearest.site.radiusMeters)}.`;
 }

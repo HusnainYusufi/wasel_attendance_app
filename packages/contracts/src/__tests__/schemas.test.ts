@@ -15,7 +15,15 @@ import {
   timezoneSchema,
 } from '../common.js';
 import { loginRequestSchema, changePasswordRequestSchema } from '../auth.js';
-import { attendanceHistoryQuerySchema, punchRequestSchema } from '../attendance.js';
+import {
+  attendanceHistoryQuerySchema,
+  attendanceRecordSchema,
+  attendanceStatusSchema,
+  punchRequestSchema,
+  punchResponseSchema,
+} from '../attendance.js';
+import { PunchOutcome, PunchType } from '../constants.js';
+import { reportRowSchema } from '../admin.js';
 import {
   createSiteRequestSchema,
   exportQuerySchema,
@@ -396,6 +404,133 @@ describe('admin schemas', () => {
 
   it('rejects a reversed export range', () => {
     expect(exportQuerySchema.safeParse({ from: '2026-03-31', to: '2026-03-01' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('geofence as a record rather than a gate', () => {
+  const SITE = { id: '11111111-1111-4111-8111-111111111111', name: 'Head Office' };
+  const RECORD = {
+    id: '22222222-2222-4222-8222-222222222222',
+    workDate: '2026-03-01',
+    checkInAt: '2026-03-01T06:20:00.000Z',
+    checkInSite: SITE,
+    checkInDistanceM: 791_043.2,
+    checkOutAt: null,
+    checkOutSite: null,
+    checkOutDistanceM: null,
+    status: 'INCOMPLETE',
+    workedMinutes: null,
+    lateMinutes: 0,
+  };
+
+  it('accepts a record whose punch had no site to measure from', () => {
+    // An organization that does not enforce a fence may legitimately have no
+    // sites, and a punch made there is a complete record with nowhere to measure
+    // from — not an invalid one.
+    const parsed = attendanceRecordSchema.parse({
+      ...RECORD,
+      checkInSite: null,
+      checkInDistanceM: null,
+    });
+
+    expect(parsed.checkInSite).toBeNull();
+    expect(parsed.checkInDistanceM).toBeNull();
+  });
+
+  it('still accepts a record that does have one', () => {
+    expect(attendanceRecordSchema.parse(RECORD).checkInSite).toEqual(SITE);
+  });
+
+  it('lets a punch response carry no site without inventing one', () => {
+    const parsed = punchResponseSchema.parse({
+      outcome: PunchOutcome.ACCEPTED,
+      type: PunchType.CHECK_IN,
+      record: { ...RECORD, checkInSite: null, checkInDistanceM: null },
+      site: null,
+      distanceM: null,
+    });
+
+    expect(parsed.site).toBeNull();
+    expect(parsed.distanceM).toBeNull();
+  });
+
+  it('makes the client tell the two modes apart without provoking a rejection', () => {
+    const base = {
+      serverTime: '2026-03-01T06:20:00.000Z',
+      timezone: 'Asia/Riyadh',
+      workDate: '2026-03-01',
+      canCheckIn: true,
+      canCheckOut: false,
+      today: null,
+      sites: [],
+      maxAccuracyMeters: 100,
+    };
+
+    expect(attendanceStatusSchema.parse({ ...base, enforceGeofence: false }).enforceGeofence).toBe(
+      false,
+    );
+    // Not optional: a client that had to guess would guess wrong exactly once,
+    // and would do it by disabling a button the server was willing to accept.
+    expect(attendanceStatusSchema.safeParse(base).success).toBe(false);
+  });
+
+  it('carries the setting on the organization, both ways', () => {
+    expect(updateOrganizationRequestSchema.parse({ enforceGeofence: false })).toEqual({
+      enforceGeofence: false,
+    });
+    expect(updateOrganizationRequestSchema.safeParse({ enforceGeofence: 'no' }).success).toBe(
+      false,
+    );
+  });
+});
+
+describe('reportRowSchema', () => {
+  const ROW = {
+    id: '33333333-3333-4333-8333-333333333333',
+    workDate: '2026-03-01',
+    userId: '44444444-4444-4444-8444-444444444444',
+    userFullName: 'Sara Haddad',
+    userEmail: 'sara@wasel.test',
+    employeeCode: 'EMP-1',
+    checkInAt: '2026-03-01T05:47:00.000Z',
+    checkInSiteName: 'Head Office',
+    checkInDistanceM: 791_043.2,
+    checkInAccuracyM: 2400,
+    checkOutAt: null,
+    checkOutSiteName: null,
+    checkOutDistanceM: null,
+    checkOutAccuracyM: null,
+    outOfRange: [PunchType.CHECK_IN],
+    status: 'INCOMPLETE',
+    workedMinutes: null,
+    lateMinutes: 0,
+  };
+
+  it('reports where each punch was and how sure the device was', () => {
+    const parsed = reportRowSchema.parse(ROW);
+
+    expect(parsed.checkInDistanceM).toBe(791_043.2);
+    expect(parsed.checkInAccuracyM).toBe(2400);
+    expect(parsed.outOfRange).toEqual([PunchType.CHECK_IN]);
+  });
+
+  it('allows a row with no site at all', () => {
+    const parsed = reportRowSchema.parse({
+      ...ROW,
+      checkInSiteName: null,
+      checkInDistanceM: null,
+      outOfRange: [],
+    });
+
+    expect(parsed.checkInSiteName).toBeNull();
+    // The accuracy is a property of the device and is never null for a check-in.
+    expect(parsed.checkInAccuracyM).toBe(2400);
+  });
+
+  it('will not carry a punch type that does not exist', () => {
+    expect(reportRowSchema.safeParse({ ...ROW, outOfRange: ['SOMETHING_ELSE'] }).success).toBe(
       false,
     );
   });

@@ -282,6 +282,184 @@ describe('attendance punches', () => {
     });
   });
 
+  /**
+   * The customer this mode exists for has employees 791 km from the nearest
+   * office. Every assertion here is about the same principle: with
+   * `enforceGeofence: false` location becomes a *record* and stops being a gate,
+   * and nothing about what gets written down is lost in the trade.
+   */
+  describe('a tenant that does not enforce its geofence', () => {
+    /** Far enough that no plausible fence could contain it. */
+    const FAR_AWAY_M = 791_000;
+
+    async function openActor(
+      organization: Record<string, unknown> = {},
+    ): Promise<AuthenticatedActor> {
+      const actor = await createUserAndLogin(ctx, {
+        organization: { timezone: 'Asia/Riyadh', enforceGeofence: false, ...organization },
+      });
+      await createSite(ctx, actor.organization.id);
+      return actor;
+    }
+
+    it('accepts a punch 791 km away and records where it happened', async () => {
+      const actor = await openActor();
+      const point = pointAtDistance(HQ, FAR_AWAY_M);
+
+      const response = await actor.post(CHECK_IN).send(punchAt(point, 14)).expect(201);
+
+      // Accepted, and still measured: the nearest site and the distance to it are
+      // exactly what an administrator opens the report to see.
+      expect(response.body.outcome).toBe(PunchOutcome.ACCEPTED);
+      expect(response.body.site.name).toBe('Head Office');
+      expect(response.body.distanceM).toBeCloseTo(FAR_AWAY_M, -1);
+
+      const record = await ctx.prisma.attendanceRecord.findFirstOrThrow();
+      expect(record.checkInLatitude).toBeCloseTo(point.latitude, 6);
+      expect(record.checkInLongitude).toBeCloseTo(point.longitude, 6);
+      expect(record.checkInAccuracyM).toBe(14);
+      expect(record.checkInSiteId).not.toBeNull();
+      expect(record.checkInDistanceM).toBeCloseTo(FAR_AWAY_M, -1);
+
+      // The outcome stays ACCEPTED. The stored distance already says "and they
+      // were 791 km away"; a separate outcome would make the enum a derived
+      // field instead of the decision record it is.
+      const event = await soleEvent();
+      expect(event.outcome).toBe(PunchOutcome.ACCEPTED);
+      expect(event.distanceM).toBeCloseTo(FAR_AWAY_M, -1);
+      expect(event.accuracyM).toBe(14);
+      expect(event.siteId).toBe(record.checkInSiteId);
+    });
+
+    it('accepts a fix far too vague to place anyone, and writes the accuracy down', async () => {
+      // The accuracy gate only ever existed to stop a wide error radius faking
+      // its way *inside* a fence. With no fence it refuses honest punches from
+      // someone whose phone reports +/-3 km indoors, and nothing else.
+      const actor = await openActor({ maxAccuracyMeters: 100 });
+
+      await actor.post(CHECK_IN).send(punchAt(HQ, 3000)).expect(201);
+
+      expect(await ctx.prisma.attendanceRecord.findFirstOrThrow()).toMatchObject({
+        checkInAccuracyM: 3000,
+      });
+      expect(await soleEvent()).toMatchObject({
+        outcome: PunchOutcome.ACCEPTED,
+        accuracyM: 3000,
+      });
+    });
+
+    it('accepts a punch in a tenant that has no sites at all', async () => {
+      const actor = await createUserAndLogin(ctx, {
+        organization: { timezone: 'Asia/Riyadh', enforceGeofence: false },
+      });
+
+      const response = await actor.post(CHECK_IN).send(punchAt(HQ)).expect(201);
+
+      expect(() => punchResponseSchema.parse(response.body)).not.toThrow();
+      expect(response.body.site).toBeNull();
+      expect(response.body.distanceM).toBeNull();
+      expect(response.body.record.checkInSite).toBeNull();
+      expect(response.body.record.checkInDistanceM).toBeNull();
+
+      const record = await ctx.prisma.attendanceRecord.findFirstOrThrow();
+      expect(record.checkInSiteId).toBeNull();
+      expect(record.checkInDistanceM).toBeNull();
+      // The coordinates and the accuracy are still recorded. They are facts
+      // about the device, not about the organization's sites.
+      expect(record.checkInLatitude).toBeCloseTo(HQ.latitude, 6);
+      expect(record.checkInAccuracyM).toBe(8);
+    });
+
+    it('closes a shift from 791 km away, and records that distance too', async () => {
+      const actor = await openActor();
+      const point = pointAtDistance(HQ, FAR_AWAY_M);
+      await actor.post(CHECK_IN).send(punchAt(point)).expect(201);
+      clock.set(new Date(MORNING.getTime() + 8 * 60 * 60 * 1000));
+
+      const response = await actor.post(CHECK_OUT).send(punchAt(point, 22)).expect(200);
+
+      expect(response.body.distanceM).toBeCloseTo(FAR_AWAY_M, -1);
+      const record = await ctx.prisma.attendanceRecord.findFirstOrThrow();
+      expect(record.checkOutDistanceM).toBeCloseTo(FAR_AWAY_M, -1);
+      expect(record.checkOutAccuracyM).toBe(22);
+      expect(record.workedMinutes).toBe(480);
+    });
+
+    it('keeps every rule that is not about location', async () => {
+      const actor = await openActor();
+      await actor
+        .post(CHECK_IN)
+        .send(punchAt(pointAtDistance(HQ, FAR_AWAY_M)))
+        .expect(201);
+
+      // A second check-in is still a duplicate, and a check-out one second later
+      // is still too short to be a shift. Standing down the fence stands down the
+      // fence, not the day's state machine.
+      const duplicate = await actor.post(CHECK_IN).send(punchAt(HQ)).expect(409);
+      expect(duplicate.body.code).toBe(ErrorCode.ALREADY_CHECKED_IN);
+
+      const tooShort = await actor.post(CHECK_OUT).send(punchAt(HQ)).expect(409);
+      expect(tooShort.body.code).toBe(ErrorCode.SHIFT_TOO_SHORT);
+    });
+
+    it('offers a check-out to a tenant with no site to close against', async () => {
+      const actor = await createUserAndLogin(ctx, {
+        organization: { timezone: 'Asia/Riyadh', enforceGeofence: false },
+      });
+      await actor.post(CHECK_IN).send(punchAt(HQ)).expect(201);
+
+      const status = await actor.get('/attendance/status').expect(200);
+
+      // With enforcement on this is deliberately withdrawn, because the punch
+      // would answer 422 NO_ACTIVE_SITE. With it off there is no gate to fail,
+      // and withholding the button would strand the shift permanently open.
+      expect(status.body).toMatchObject({
+        enforceGeofence: false,
+        canCheckIn: false,
+        canCheckOut: true,
+      });
+    });
+  });
+
+  /**
+   * The regression that matters most: switching the setting on restores every
+   * refusal, unchanged, including for the tenant shapes the new mode introduced.
+   */
+  describe('the same punches against a tenant that does enforce it', () => {
+    it.each([
+      ['791 km from the only site', 791_000, 8, ErrorCode.OUT_OF_RANGE],
+      ['a 3 km error radius at the office', 0, 3000, ErrorCode.LOW_GPS_ACCURACY],
+    ])('still refuses %s', async (_name, distance, accuracy, code) => {
+      const actor = await createUserAndLogin(ctx, {
+        organization: { timezone: 'Asia/Riyadh', enforceGeofence: true, maxAccuracyMeters: 100 },
+      });
+      await createSite(ctx, actor.organization.id);
+
+      const response = await actor
+        .post(CHECK_IN)
+        .send(punchAt(pointAtDistance(HQ, distance), accuracy))
+        .expect(422);
+
+      expect(response.body.code).toBe(code);
+      expect(await ctx.prisma.attendanceRecord.count()).toBe(0);
+    });
+
+    it('still refuses a tenant with no active site', async () => {
+      const actor = await createUserAndLogin(ctx, {
+        organization: { timezone: 'Asia/Riyadh', enforceGeofence: true },
+      });
+
+      const response = await actor.post(CHECK_IN).send(punchAt(HQ)).expect(422);
+
+      expect(response.body.code).toBe(ErrorCode.NO_ACTIVE_SITE);
+      expect(await soleEvent()).toMatchObject({
+        outcome: PunchOutcome.REJECTED_NO_ACTIVE_SITE,
+        siteId: null,
+        distanceM: null,
+      });
+    });
+  });
+
   describe('work dates', () => {
     it('files an evening punch in a positive offset under tomorrow', async () => {
       // 01:30 on the 2nd in Riyadh. The UTC date is still the 1st.

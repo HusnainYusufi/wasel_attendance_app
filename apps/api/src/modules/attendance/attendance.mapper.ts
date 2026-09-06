@@ -38,6 +38,11 @@ export type GeofenceSiteRow = Prisma.SiteGetPayload<{ select: typeof GEOFENCE_SI
 /**
  * Row → contract DTO. The only shape that leaves this module.
  *
+ * `checkInSite` is nullable here for the same reason `checkOutSite` always was:
+ * a site is the point a punch was *measured from*, not a precondition for it. An
+ * organization that does not enforce a geofence may have no sites at all, and a
+ * punch made there is a complete record with nowhere to measure from.
+ *
  * Two conversions are load-bearing. Instants become ISO 8601 strings, per
  * CONVENTIONS §4 — a `Date` crossing the API boundary serialises differently
  * depending on who calls `JSON.stringify`. And `workDate` is decoded from its
@@ -50,7 +55,7 @@ export function toAttendanceRecordDto(row: AttendanceRecordRow): AttendanceRecor
     id: row.id,
     workDate: workDateFromColumn(row.workDate),
     checkInAt: row.checkInAt.toISOString(),
-    checkInSite: toSiteSummary(row.checkInSite),
+    checkInSite: row.checkInSite ? toSiteSummary(row.checkInSite) : null,
     checkInDistanceM: row.checkInDistanceM,
     checkOutAt: row.checkOutAt?.toISOString() ?? null,
     checkOutSite: row.checkOutSite ? toSiteSummary(row.checkOutSite) : null,

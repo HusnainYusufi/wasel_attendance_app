@@ -158,7 +158,7 @@ export default function AdminScreen() {
                   </span>
                 }
                 title="Organization settings"
-                description="Timezone, workday, day boundary, GPS"
+                description="Timezone, workday, geofence, GPS"
               />
             </li>
           </List>

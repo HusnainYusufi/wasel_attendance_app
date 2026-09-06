@@ -92,6 +92,7 @@ export class AdminOrganizationService {
         ...(body.maxAccuracyMeters === undefined
           ? {}
           : { maxAccuracyMeters: body.maxAccuracyMeters }),
+        ...(body.enforceGeofence === undefined ? {} : { enforceGeofence: body.enforceGeofence }),
       },
       select: ADMIN_ORGANIZATION_SELECT,
     });
@@ -116,6 +117,17 @@ export class AdminOrganizationService {
         ...(updated.dayStartsAt === current.dayStartsAt
           ? {}
           : { previousDayStartsAt: current.dayStartsAt, dayStartsAt: updated.dayStartsAt }),
+        // The third setting in this family, and the loudest of them: it decides
+        // whether a punch taken 791 km from the nearest office is a record or a
+        // refusal. A report that shows a month of out-of-range check-ins is
+        // explained entirely by *when* this was switched, so the log has to be
+        // able to answer it without diffing settings edits.
+        ...(updated.enforceGeofence === current.enforceGeofence
+          ? {}
+          : {
+              previousEnforceGeofence: String(current.enforceGeofence),
+              enforceGeofence: String(updated.enforceGeofence),
+            }),
       },
       client,
     });

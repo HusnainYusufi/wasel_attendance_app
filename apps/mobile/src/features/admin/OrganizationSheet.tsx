@@ -35,6 +35,7 @@ interface Draft {
   dayStartsAt: string;
   lateGraceMinutes: string;
   maxAccuracyMeters: string;
+  enforceGeofence: boolean;
 }
 
 function toDraft(org: OrganizationDto): Draft {
@@ -46,6 +47,7 @@ function toDraft(org: OrganizationDto): Draft {
     dayStartsAt: org.dayStartsAt,
     lateGraceMinutes: String(org.lateGraceMinutes),
     maxAccuracyMeters: String(org.maxAccuracyMeters),
+    enforceGeofence: org.enforceGeofence,
   };
 }
 
@@ -80,6 +82,10 @@ function buildPatch(draft: Draft, original: OrganizationDto): UpdateOrganization
   const accuracy = Number(draft.maxAccuracyMeters);
   if (Number.isFinite(accuracy) && accuracy !== original.maxAccuracyMeters) {
     patch.maxAccuracyMeters = accuracy;
+  }
+
+  if (draft.enforceGeofence !== original.enforceGeofence) {
+    patch.enforceGeofence = draft.enforceGeofence;
   }
 
   return patch;
@@ -203,7 +209,7 @@ export function OrganizationSheet({ open, onClose }: OrganizationSheetProps) {
     save.mutate(patch);
   };
 
-  const update = (key: keyof Draft, value: string) =>
+  const update = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setEdits((current) => ({ ...current, [key]: value }));
 
   return (
@@ -308,6 +314,23 @@ export function OrganizationSheet({ open, onClose }: OrganizationSheetProps) {
             onChange={(event) => update('lateGraceMinutes', event.target.value)}
           />
 
+          <div className={styles.checkboxRow}>
+            <input
+              id="organization-enforce-geofence"
+              type="checkbox"
+              className={styles.checkbox}
+              checked={draft.enforceGeofence}
+              onChange={(event) => update('enforceGeofence', event.target.checked)}
+            />
+            <label className={styles.checkboxLabel} htmlFor="organization-enforce-geofence">
+              <span className={styles.checkboxTitle}>Only accept punches inside a site</span>
+              <span className={styles.checkboxHint}>
+                Switch off for staff who work away from any site: every punch is accepted wherever
+                they are, and the distance from the nearest site is still recorded.
+              </span>
+            </label>
+          </div>
+
           <Input
             label="Maximum GPS accuracy radius"
             type="number"
@@ -316,7 +339,12 @@ export function OrganizationSheet({ open, onClose }: OrganizationSheetProps) {
             max={ACCURACY_CEILING_M}
             step={1}
             required
-            hint="Metres. A fix with a larger error radius is refused, however close it claims to be."
+            disabled={!draft.enforceGeofence}
+            hint={
+              draft.enforceGeofence
+                ? 'Metres. A fix with a larger error radius is refused, however close it claims to be.'
+                : 'Not applied while punches are accepted from anywhere. The accuracy is still recorded.'
+            }
             value={draft.maxAccuracyMeters}
             error={errors['maxAccuracyMeters']}
             onChange={(event) => update('maxAccuracyMeters', event.target.value)}

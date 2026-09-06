@@ -1,4 +1,4 @@
-import { AttendanceStatus, Role, UserStatus } from '@wasel/contracts';
+import { AttendanceStatus, PunchType, Role, UserStatus } from '@wasel/contracts';
 import { describe, expect, it } from 'vitest';
 import {
   ADMIN_USER_SELECT,
@@ -76,6 +76,7 @@ describe('toOrganizationDto', () => {
         dayStartsAt: '00:00',
         lateGraceMinutes: 15,
         maxAccuracyMeters: 100,
+        enforceGeofence: true,
       }),
     ).toEqual({
       id: '44444444-4444-4444-8444-444444444444',
@@ -87,6 +88,7 @@ describe('toOrganizationDto', () => {
       dayStartsAt: '00:00',
       lateGraceMinutes: 15,
       maxAccuracyMeters: 100,
+      enforceGeofence: true,
     });
   });
 });
@@ -111,6 +113,8 @@ describe('toReportRow', () => {
       reportRecord({
         checkOutAt: null,
         checkOutSite: null,
+        checkOutAccuracyM: null,
+        checkOutDistanceM: null,
         workedMinutes: null,
         status: AttendanceStatus.INCOMPLETE,
       }),
@@ -118,6 +122,57 @@ describe('toReportRow', () => {
 
     expect(row.checkOutAt).toBeNull();
     expect(row.checkOutSiteName).toBeNull();
+    expect(row.checkOutDistanceM).toBeNull();
+    expect(row.checkOutAccuracyM).toBeNull();
     expect(row.workedMinutes).toBeNull();
+  });
+
+  it('carries the distance and the accuracy of both punches', () => {
+    expect(toReportRow(reportRecord())).toMatchObject({
+      checkInDistanceM: 20,
+      checkInAccuracyM: 12,
+      checkOutDistanceM: 31,
+      checkOutAccuracyM: 14,
+      outOfRange: [],
+    });
+  });
+
+  it('names the punch that landed outside its own fence', () => {
+    const row = toReportRow(reportRecord({ checkInDistanceM: 791_043.2 }));
+
+    // The comparison is distance against *that site's* radius, which is why the
+    // radius rides along on the join.
+    expect(row.outOfRange).toEqual([PunchType.CHECK_IN]);
+    expect(row.checkInDistanceM).toBe(791_043.2);
+  });
+
+  it('flags both punches when both were outside', () => {
+    expect(
+      toReportRow(reportRecord({ checkInDistanceM: 400, checkOutDistanceM: 900 })).outOfRange,
+    ).toEqual([PunchType.CHECK_IN, PunchType.CHECK_OUT]);
+  });
+
+  it('treats the fence line itself as inside', () => {
+    // The stored distance is truncated to a tenth and never rounded up, so a
+    // punch the server accepted at exactly the radius must not be reported as a
+    // violation by the file that documents it.
+    expect(toReportRow(reportRecord({ checkInDistanceM: 150 })).outOfRange).toEqual([]);
+    expect(toReportRow(reportRecord({ checkInDistanceM: 150.1 })).outOfRange).toEqual([
+      PunchType.CHECK_IN,
+    ]);
+  });
+
+  it('flags nothing for a record with no site', () => {
+    const row = toReportRow(
+      reportRecord({ checkInSite: null, checkInDistanceM: null, checkOutSite: null }),
+    );
+
+    // A fence that does not exist cannot be outside of. Flagging here would make
+    // the column mean "this tenant has no sites" instead of "look at this row".
+    expect(row.outOfRange).toEqual([]);
+    expect(row.checkInSiteName).toBeNull();
+    expect(row.checkInDistanceM).toBeNull();
+    // Still recorded: the accuracy is a property of the device, not of the sites.
+    expect(row.checkInAccuracyM).toBe(12);
   });
 });

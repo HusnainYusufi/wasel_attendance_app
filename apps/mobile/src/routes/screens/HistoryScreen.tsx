@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { PAGE_SIZE_DEFAULT, type AttendanceRecordDto } from '@wasel/contracts';
+import { PAGE_SIZE_DEFAULT, formatDistance, type AttendanceRecordDto } from '@wasel/contracts';
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { attendanceApi, queryKeys } from '../../api';
 import { useAuth } from '../../auth';
@@ -173,6 +173,26 @@ export default function HistoryScreen() {
   );
 }
 
+/**
+ * Where the day was opened, and how far from the site that was.
+ *
+ * The distance is on every row rather than only on the far ones: it is what the
+ * server actually recorded, and a number that appeared only when something was
+ * "wrong" would turn a neutral fact into an accusation. Without a site there is
+ * nothing to measure from, and saying so beats a blank that reads as a bug.
+ */
+function placeOf(record: AttendanceRecordDto): string {
+  if (record.checkInSite === null) return 'No site configured';
+  if (record.checkInDistanceM === null) return record.checkInSite.name;
+  return `${record.checkInSite.name} · ${formatDistance(record.checkInDistanceM)}`;
+}
+
+/** Where the day was opened, and how late it started. */
+function subtitleOf(record: AttendanceRecordDto): string {
+  const late = record.lateMinutes > 0 ? ` · ${formatDuration(record.lateMinutes)} late` : '';
+  return `${placeOf(record)}${late}`;
+}
+
 function HistoryRow({ record, timezone }: { record: AttendanceRecordDto; timezone: string }) {
   const checkOutAt = record.checkOutAt;
 
@@ -192,9 +212,11 @@ function HistoryRow({ record, timezone }: { record: AttendanceRecordDto; timezon
               {checkOutAt === null ? 'open' : formatTime(checkOutAt, timezone)}
             </span>
           </span>
-          <span className={styles.site} title={record.checkInSite.name}>
-            {record.checkInSite.name}
-            {record.lateMinutes > 0 ? ` · ${formatDuration(record.lateMinutes)} late` : ''}
+          {/* One string for both the text and the tooltip: the line ellipses on a
+              narrow screen, and a `title` that carried only half of it would drop
+              exactly the part that got cut. */}
+          <span className={styles.site} title={subtitleOf(record)}>
+            {subtitleOf(record)}
           </span>
         </div>
 
