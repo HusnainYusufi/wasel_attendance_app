@@ -58,7 +58,11 @@ services:
     # `migrate deploy` only applies committed migrations. It never generates one
     # from drift and never resets — unlike `migrate dev` or `db push`, either of
     # which can destroy production data.
-    command: ['pnpm', 'exec', 'prisma', 'migrate', 'deploy']
+    #
+    # Invoked as the binary rather than through pnpm: this service runs on an
+    # egress-less network, and `pnpm` under corepack tries to fetch itself from
+    # registry.npmjs.org on first use, which fails with EAI_AGAIN.
+    command: ['./node_modules/.bin/prisma', 'migrate', 'deploy']
     networks: [internal]
 
   api:

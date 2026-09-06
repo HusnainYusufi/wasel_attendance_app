@@ -71,9 +71,12 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production
-ENV PNPM_HOME=/pnpm
-ENV PATH=$PNPM_HOME:$PATH
-RUN corepack enable
+
+# Deliberately no corepack/pnpm in the runtime image. Nothing here needs a
+# package manager: the app is `node dist/main.js` and migrations run the Prisma
+# binary directly. Leaving corepack enabled invites a first-use download from
+# registry.npmjs.org at container start — which fails outright on an egress-less
+# network, and is an unwanted supply-chain fetch on any other.
 
 WORKDIR /repo
 
