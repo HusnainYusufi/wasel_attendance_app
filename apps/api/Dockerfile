@@ -16,6 +16,16 @@ ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
 
+# Prisma resolves which engine binary to download by detecting the OpenSSL
+# version during install. Without `openssl` present it falls back to 1.1.x,
+# ships that engine, and the 3.0 runtime then finds nothing it can execute —
+# whereupon it tries to fetch one from binaries.prisma.sh at migrate time and
+# dies on any host without egress. Installing it here makes detection match the
+# runtime, so the correct engine is baked into the image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /repo
 
 # Manifests first, so a source-only change reuses the cached install layer.
@@ -43,6 +53,16 @@ FROM node:22-bookworm-slim AS deps
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
 RUN corepack enable
+
+# Prisma resolves which engine binary to download by detecting the OpenSSL
+# version during install. Without `openssl` present it falls back to 1.1.x,
+# ships that engine, and the 3.0 runtime then finds nothing it can execute —
+# whereupon it tries to fetch one from binaries.prisma.sh at migrate time and
+# dies on any host without egress. Installing it here makes detection match the
+# runtime, so the correct engine is baked into the image.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends openssl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /repo
 
