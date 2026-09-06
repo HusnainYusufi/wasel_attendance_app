@@ -1,0 +1,116 @@
+# Wasel Attendance — production stack.
+#
+#   caddy     :80/:443  automatic HTTPS, the only thing exposed to the internet
+#   api       :3000     internal only
+#   postgres  :5432     internal only, on a named volume
+#
+# Postgres is deliberately NOT published to the host. A database reachable from
+# the internet is the single most common way a small deployment is breached, and
+# nothing outside this network needs it.
+#
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d
+#
+# Migrations run as a one-shot service that must exit 0 before the API starts, so
+# a deploy can never serve traffic against a schema it was not built for.
+
+name: wasel
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env.production}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env.production}
+      POSTGRES_DB: ${POSTGRES_DB:-wasel_attendance}
+      POSTGRES_INITDB_ARGS: '--locale=C --encoding=UTF8'
+    volumes:
+      - wasel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks: [internal]
+
+  migrate:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: wasel-api:latest
+    restart: 'no'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wasel_attendance}?schema=public
+    # `migrate deploy` only applies committed migrations. It never generates one
+    # from drift and never resets — unlike `migrate dev` or `db push`, either of
+    # which can destroy production data.
+    command: ['pnpm', 'exec', 'prisma', 'migrate', 'deploy']
+    networks: [internal]
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    image: wasel-api:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOST: 0.0.0.0
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-wasel_attendance}?schema=public
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?generate with openssl rand -base64 48}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?generate with openssl rand -base64 48}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-30d}
+      CORS_ORIGINS: ${CORS_ORIGINS:?list the app origins, never *}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: 'false'
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      # Exactly one proxy (Caddy) sits in front. Never raise this above the real
+      # hop count: each extra hop lets a client forge its own IP in
+      # X-Forwarded-For, poisoning the audit log and defeating per-IP limits.
+      TRUST_PROXY_HOPS: 1
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-100}
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-60000}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+    networks: [internal, web]
+    # No `ports:` — only Caddy reaches this.
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      # A bare IP cannot get a public certificate. If you have no domain, use a
+      # wildcard-DNS host that resolves to your IP — e.g. 203.0.113.10.sslip.io —
+      # and Caddy will obtain a real Let's Encrypt certificate for it.
+      DOMAIN: ${DOMAIN:?set DOMAIN to the hostname the app will call}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - wasel_caddy_data:/data
+      - wasel_caddy_config:/config
+    networks: [web]
+
+networks:
+  # No internet egress needed between the API and its database.
+  internal:
+    internal: true
+  web:
+
+volumes:
+  wasel_pgdata:
+  wasel_caddy_data: # certificates live here — losing it means re-issuing them
+  wasel_caddy_config:

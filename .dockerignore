@@ -1,0 +1,60 @@
+# Build context hygiene.
+#
+# Two reasons this file matters. Speed: without it the whole workspace —
+# node_modules, dist, .git — is uploaded to the daemon on every build. Safety:
+# the builder stage does `COPY apps/api ./apps/api`, which would otherwise sweep
+# a developer's local .env straight into an image layer, where it survives even
+# if a later stage deletes it.
+
+# Secrets — never, under any circumstances
+.env
+.env.*
+!.env.example
+!.env.production.example
+*.pem
+*.key
+*.jks
+*.keystore
+
+# Dependencies and build output (reinstalled/rebuilt inside the image)
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+*.tsbuildinfo
+
+# Version control and CI
+.git
+.github
+.gitignore
+
+# Local tooling and editors
+.vscode
+.idea
+.DS_Store
+.pnpm-store
+.cache
+.turbo
+
+# Tests and coverage — not needed in a runtime image
+coverage
+**/coverage
+**/__tests__
+**/*.spec.ts
+**/*.test.ts
+apps/api/test
+playwright-report
+test-results
+.playwright-mcp
+
+# The mobile app is built by CI into an APK, not by this image
+apps/mobile
+
+# Docs and local compose
+docs
+*.md
+!README.md
+docker-compose.yml
+docker-compose.prod.yml

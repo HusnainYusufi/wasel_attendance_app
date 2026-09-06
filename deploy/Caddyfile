@@ -1,0 +1,39 @@
+# Wasel Attendance — reverse proxy and TLS terminator.
+#
+# Caddy obtains and renews a Let's Encrypt certificate for {$DOMAIN} on its own.
+# TLS is not optional here: Android blocks cleartext HTTP by default, so a
+# Capacitor build simply cannot talk to an http:// API.
+
+{
+	email {$ACME_EMAIL}
+	# Trust no forwarded headers from clients; Caddy sets them itself.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# The API sets its own security headers (HSTS, CSP, nosniff). Caddy adds only
+	# what it alone knows — that this hop was HTTPS.
+	header {
+		-Server
+	}
+
+	reverse_proxy api:3000 {
+		header_up X-Forwarded-Proto https
+		# An attendance export can legitimately stream for minutes; the API's own
+		# idle deadline is what closes a stalled client, so the proxy must not cut
+		# a healthy download short first.
+		transport http {
+			read_timeout 15m
+			write_timeout 15m
+		}
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

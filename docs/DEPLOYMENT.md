@@ -8,6 +8,57 @@ so deploy the API first and know its public URL before building a release APK.
 
 ## 1. API
 
+### Deploying to a server (Docker)
+
+Everything the API needs runs from one compose file: the API itself, PostgreSQL,
+and Caddy, which obtains and renews a real HTTPS certificate on its own. Only
+Caddy is exposed — the database is not published to the host at all, because a
+database reachable from the internet is the most common way a small deployment
+is breached.
+
+On any machine with Docker:
+
+```bash
+git clone https://github.com/HusnainYusufi/wasel_attendance_app.git
+cd wasel_attendance_app
+cp .env.production.example .env.production
+# fill it in — every CHANGE_ME must change
+docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+```
+
+Then create the first admin:
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.production \
+  run --rm -e NODE_ENV=production api pnpm db:seed
+```
+
+Migrations apply automatically: a one-shot `migrate` service runs
+`prisma migrate deploy` and must exit 0 before the API starts, so a deploy can
+never serve traffic against a schema it was not built for.
+
+**HTTPS is not optional.** Android blocks cleartext HTTP, so a Capacitor build
+cannot talk to an `http://` API at all. Caddy handles certificates
+automatically, but it needs a hostname — certificate authorities do not issue
+for bare IP addresses. With no domain of your own, point `DOMAIN` at wildcard
+DNS that resolves to your server and it just works:
+
+```
+DOMAIN=203.0.113.10.sslip.io      # substitute your server's IP
+```
+
+Verify from outside the server, not from on it:
+
+```bash
+curl https://$DOMAIN/api/v1/health/ready
+```
+
+Then set the `VITE_API_BASE_URL` repository variable to `https://$DOMAIN` and
+re-run the Android workflow. That APK is a fully working app.
+
+To update after a push: `git pull && docker compose -f docker-compose.prod.yml
+--env-file .env.production up -d --build`.
+
 ### Environment
 
 Every variable is validated at boot; the process **exits** rather than starting

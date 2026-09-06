@@ -53,3 +53,6 @@ local.properties
 # Playwright MCP scratch output
 .playwright-mcp/
 *.png.tmp
+
+# Production secrets — never commit
+.env.production
