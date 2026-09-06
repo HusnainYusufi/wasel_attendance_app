@@ -1,0 +1,13 @@
+/**
+ * Full-height, centred frame for the chrome-free routes — 404 and the route
+ * error boundary. Both sit outside the app shell, so they carry their own
+ * safe-area padding and background.
+ */
+.screen {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding-block: calc(var(--safe-top) + var(--space-6)) calc(var(--safe-bottom) + var(--space-6));
+  padding-inline: var(--page-gutter);
+  background-color: var(--color-bg);
+}

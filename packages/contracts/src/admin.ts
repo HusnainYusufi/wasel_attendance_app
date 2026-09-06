@@ -1,0 +1,251 @@
+import { z } from 'zod';
+import {
+  emailSchema,
+  employeeCodeSchema,
+  fullNameSchema,
+  isoDateSchema,
+  latitudeSchema,
+  longitudeSchema,
+  paginationQuerySchema,
+  passwordSchema,
+  timeOfDaySchema,
+  timezoneSchema,
+  uuidSchema,
+  inclusiveDayCount,
+} from './common.js';
+import {
+  ACCURACY_CEILING_M,
+  AttendanceStatus,
+  ExportFormat,
+  EXPORT_MAX_RANGE_DAYS,
+  Role,
+  SITE_RADIUS_MAX_M,
+  SITE_RADIUS_MIN_M,
+  UserStatus,
+} from './constants.js';
+
+// ---------------------------------------------------------------------------
+// Users
+// ---------------------------------------------------------------------------
+
+export const createUserRequestSchema = z.object({
+  email: emailSchema,
+  password: passwordSchema,
+  fullName: fullNameSchema,
+  employeeCode: employeeCodeSchema.optional().transform((v) => (v ? v : undefined)),
+  role: z.enum([Role.ADMIN, Role.MEMBER]).default(Role.MEMBER),
+});
+export type CreateUserRequest = z.infer<typeof createUserRequestSchema>;
+
+export const updateUserRequestSchema = z
+  .object({
+    /**
+     * The sign-in identifier, correctable.
+     *
+     * Without this an address typed wrong at creation could only be fixed by
+     * deleting the account and making a new one — which orphans every attendance
+     * record onto the soft-deleted row and leaves the person missing from their
+     * own history.
+     *
+     * Deliberately the same {@link emailSchema} the create request uses, so the
+     * trimmed-lowercase normalisation applies here too. Bypassing it would let a
+     * rename to `Ali@x.com` slip past a `(organizationId, email)` index that
+     * already holds `ali@x.com`, producing exactly the two-accounts-one-human
+     * split the normalisation exists to prevent.
+     */
+    email: emailSchema.optional(),
+    fullName: fullNameSchema.optional(),
+    employeeCode: employeeCodeSchema.nullable().optional(),
+    role: z.enum([Role.ADMIN, Role.MEMBER]).optional(),
+    status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Provide at least one field to update',
+  });
+export type UpdateUserRequest = z.infer<typeof updateUserRequestSchema>;
+
+export const resetUserPasswordRequestSchema = z.object({ newPassword: passwordSchema });
+export type ResetUserPasswordRequest = z.infer<typeof resetUserPasswordRequestSchema>;
+
+export const listUsersQuerySchema = paginationQuerySchema.extend({
+  search: z.string().trim().max(120).optional(),
+  role: z.enum([Role.ADMIN, Role.MEMBER]).optional(),
+  status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]).optional(),
+});
+export type ListUsersQuery = z.infer<typeof listUsersQuerySchema>;
+
+export const userSchema = z.object({
+  id: uuidSchema,
+  email: z.string(),
+  fullName: z.string(),
+  employeeCode: z.string().nullable(),
+  role: z.enum([Role.ADMIN, Role.MEMBER]),
+  status: z.enum([UserStatus.ACTIVE, UserStatus.SUSPENDED]),
+  lastLoginAt: z.string().nullable(),
+  createdAt: z.string(),
+});
+export type UserDto = z.infer<typeof userSchema>;
+
+// ---------------------------------------------------------------------------
+// Sites
+// ---------------------------------------------------------------------------
+
+/**
+ * The site fields that carry no default.
+ *
+ * Kept separate so the update schema can be built without them. `.partial()`
+ * makes a key optional but does **not** strip its `.default()`, so deriving the
+ * patch schema from `createSiteRequestSchema` would inject `isActive: true` into
+ * every request — silently reactivating a geofence whenever an admin edited an
+ * unrelated field on a site they had deliberately closed.
+ */
+const siteMutableFields = {
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(120),
+  address: z.string().trim().max(255).optional(),
+  latitude: latitudeSchema,
+  longitude: longitudeSchema,
+  radiusMeters: z
+    .number()
+    .int()
+    .min(SITE_RADIUS_MIN_M, `Radius must be at least ${SITE_RADIUS_MIN_M} metres`)
+    .max(SITE_RADIUS_MAX_M, `Radius must be at most ${SITE_RADIUS_MAX_M} metres`),
+};
+
+export const createSiteRequestSchema = z.object({
+  ...siteMutableFields,
+  isActive: z.boolean().default(true),
+});
+export type CreateSiteRequest = z.infer<typeof createSiteRequestSchema>;
+
+export const updateSiteRequestSchema = z
+  .object({ ...siteMutableFields, isActive: z.boolean() })
+  .partial()
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Provide at least one field to update',
+  });
+export type UpdateSiteRequest = z.infer<typeof updateSiteRequestSchema>;
+
+export const siteSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  address: z.string().nullable(),
+  latitude: z.number(),
+  longitude: z.number(),
+  radiusMeters: z.number().int(),
+  isActive: z.boolean(),
+  createdAt: z.string(),
+});
+export type SiteDto = z.infer<typeof siteSchema>;
+
+// ---------------------------------------------------------------------------
+// Organization settings
+// ---------------------------------------------------------------------------
+
+export const updateOrganizationRequestSchema = z
+  .object({
+    name: z.string().trim().min(2).max(120).optional(),
+    timezone: timezoneSchema.optional(),
+    workdayStart: timeOfDaySchema.optional(),
+    workdayEnd: timeOfDaySchema.optional(),
+    /**
+     * Local wall-clock time the business day rolls over. Deliberately *not*
+     * constrained against `workdayStart`/`workdayEnd`: a night-shift tenant
+     * wants the boundary in the middle of its off-hours, which for a 23:00 start
+     * means somewhere in the afternoon, and any rule tying the two together
+     * would forbid exactly the configuration this field exists to allow.
+     */
+    dayStartsAt: timeOfDaySchema.optional(),
+    lateGraceMinutes: z.number().int().min(0).max(720).optional(),
+    maxAccuracyMeters: z.number().int().min(10).max(ACCURACY_CEILING_M).optional(),
+  })
+  .refine((v) => Object.values(v).some((x) => x !== undefined), {
+    message: 'Provide at least one field to update',
+  })
+  .refine((v) => !v.workdayStart || !v.workdayEnd || v.workdayStart < v.workdayEnd, {
+    message: 'Workday start must be before workday end',
+    path: ['workdayEnd'],
+  });
+export type UpdateOrganizationRequest = z.infer<typeof updateOrganizationRequestSchema>;
+
+export const organizationSchema = z.object({
+  id: uuidSchema,
+  name: z.string(),
+  slug: z.string(),
+  timezone: z.string(),
+  workdayStart: z.string(),
+  workdayEnd: z.string(),
+  /** `HH:mm` local. The instant the tenant's business day rolls over. */
+  dayStartsAt: z.string(),
+  lateGraceMinutes: z.number().int(),
+  maxAccuracyMeters: z.number().int(),
+});
+export type OrganizationDto = z.infer<typeof organizationSchema>;
+
+// ---------------------------------------------------------------------------
+// Reporting & export
+// ---------------------------------------------------------------------------
+
+const rangeShape = {
+  from: isoDateSchema,
+  to: isoDateSchema,
+  userId: uuidSchema.optional(),
+};
+
+const withRangeRules = <T extends z.ZodType<{ from: string; to: string }>>(schema: T) =>
+  schema
+    .refine((v) => v.from <= v.to, { message: '`from` must be on or before `to`', path: ['from'] })
+    .refine((v) => inclusiveDayCount(v.from, v.to) <= EXPORT_MAX_RANGE_DAYS, {
+      message: `Range must not exceed ${EXPORT_MAX_RANGE_DAYS} days`,
+      path: ['to'],
+    });
+
+export const attendanceReportQuerySchema = withRangeRules(paginationQuerySchema.extend(rangeShape));
+export type AttendanceReportQuery = z.infer<typeof attendanceReportQuerySchema>;
+
+export const exportQuerySchema = withRangeRules(
+  z.object({
+    ...rangeShape,
+    format: z.enum([ExportFormat.CSV, ExportFormat.XLSX]).default(ExportFormat.XLSX),
+  }),
+);
+export type ExportQuery = z.infer<typeof exportQuerySchema>;
+
+export const reportRowSchema = z.object({
+  id: uuidSchema,
+  workDate: z.string(),
+  userId: uuidSchema,
+  userFullName: z.string(),
+  userEmail: z.string(),
+  employeeCode: z.string().nullable(),
+  checkInAt: z.string(),
+  checkInSiteName: z.string(),
+  checkOutAt: z.string().nullable(),
+  checkOutSiteName: z.string().nullable(),
+  status: z.enum([AttendanceStatus.PRESENT, AttendanceStatus.LATE, AttendanceStatus.INCOMPLETE]),
+  workedMinutes: z.number().int().nullable(),
+  lateMinutes: z.number().int(),
+});
+export type ReportRow = z.infer<typeof reportRowSchema>;
+
+export const reportSummarySchema = z.object({
+  totalRecords: z.number().int(),
+  presentCount: z.number().int(),
+  lateCount: z.number().int(),
+  incompleteCount: z.number().int(),
+  distinctUsers: z.number().int(),
+  totalWorkedMinutes: z.number().int(),
+});
+export type ReportSummary = z.infer<typeof reportSummarySchema>;
+
+/** Dashboard tiles for "today" in the organization's timezone. */
+export const adminOverviewSchema = z.object({
+  workDate: z.string(),
+  timezone: z.string(),
+  totalActiveUsers: z.number().int(),
+  checkedInCount: z.number().int(),
+  checkedOutCount: z.number().int(),
+  lateCount: z.number().int(),
+  absentCount: z.number().int(),
+  rejectedAttemptsToday: z.number().int(),
+});
+export type AdminOverview = z.infer<typeof adminOverviewSchema>;

@@ -1,0 +1,45 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: wasel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wasel
+      POSTGRES_PASSWORD: wasel_dev_password
+      POSTGRES_DB: wasel_attendance
+      # Deterministic collation so ORDER BY is stable across machines.
+      POSTGRES_INITDB_ARGS: '--locale=C --encoding=UTF8'
+    ports:
+      - '5432:5432'
+    volumes:
+      - wasel_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wasel -d wasel_attendance']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  # Isolated database for integration tests; tmpfs so it is fast and disposable.
+  postgres-test:
+    image: postgres:17-alpine
+    container_name: wasel-postgres-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wasel
+      POSTGRES_PASSWORD: wasel_test_password
+      POSTGRES_DB: wasel_attendance_test
+      POSTGRES_INITDB_ARGS: '--locale=C --encoding=UTF8'
+    ports:
+      - '5434:5432'
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U wasel -d wasel_attendance_test']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  wasel_pgdata:

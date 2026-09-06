@@ -1,0 +1,153 @@
+.viewport {
+  position: fixed;
+  z-index: var(--z-toast);
+  inset-inline: 0;
+  inset-block-end: calc(var(--safe-bottom) + var(--toast-offset));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-inline: var(--page-gutter);
+  /* The viewport spans the screen so toasts can centre, but only the toasts
+     themselves accept pointer input — otherwise it would swallow taps on the
+     content underneath. */
+  pointer-events: none;
+  align-items: center;
+}
+
+.toast {
+  position: relative;
+  overflow: hidden;
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  max-width: var(--page-max-width);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-raised);
+  border: var(--border-width) solid var(--color-border-subtle);
+  box-shadow: var(--shadow-lg);
+  animation: toastIn var(--duration-normal) var(--ease-emphasized) both;
+}
+
+.toast[data-state='closed'] {
+  animation: toastOut var(--duration-fast) var(--ease-exit) both;
+}
+
+/* A 3px leading rule carries the tone. Colour is never the only signal — the
+   icon differs per tone as well. */
+.accentBar {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: 3px;
+  border-start-start-radius: var(--radius-lg);
+  border-end-start-radius: var(--radius-lg);
+}
+
+.neutral .accentBar {
+  background-color: var(--color-text-subtle);
+}
+
+.neutral .icon {
+  color: var(--color-text-subtle);
+}
+
+.success .accentBar {
+  background-color: var(--color-success);
+}
+
+.success .icon {
+  color: var(--color-success-text);
+}
+
+.warning .accentBar {
+  background-color: var(--color-warning);
+}
+
+.warning .icon {
+  color: var(--color-warning-text);
+}
+
+.danger .accentBar {
+  background-color: var(--color-danger);
+}
+
+.danger .icon {
+  color: var(--color-danger-text);
+}
+
+.icon {
+  flex: none;
+  margin-block-start: 0.05rem;
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--font-size-base);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text);
+}
+
+.description {
+  font-size: var(--font-size-md);
+  line-height: var(--leading-snug);
+  color: var(--color-text-muted);
+}
+
+.action {
+  position: relative;
+  align-self: flex-start;
+  margin-block-start: var(--space-1);
+  padding-block: var(--space-1);
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-semibold);
+  color: var(--color-accent-text);
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Keeps the tap target at 44px without padding the toast out to 60px tall. */
+.action::after {
+  content: '';
+  position: absolute;
+  inset: 50% -0.5rem auto;
+  translate: 0 -50%;
+  height: var(--size-tap-min);
+}
+
+.close {
+  flex: none;
+  align-self: flex-start;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes toastOut {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(0.5rem) scale(0.98);
+  }
+}

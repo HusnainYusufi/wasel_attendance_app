@@ -1,0 +1,24 @@
+.splash {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-6);
+  height: 100dvh;
+  padding: var(--space-6);
+  padding-block-start: calc(var(--safe-top) + var(--space-6));
+  padding-block-end: calc(var(--safe-bottom) + var(--space-6));
+  background-color: var(--color-bg);
+  text-align: center;
+}
+
+/* The mark holds still and only the spinner moves: a logo that animates on every
+   cold start makes a fast launch feel slow. */
+.spinner {
+  color: var(--color-text-subtle);
+}
+
+.message {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}

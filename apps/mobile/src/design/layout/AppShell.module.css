@@ -1,0 +1,103 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  /* dvh, not vh: on Android the URL bar collapse changes the viewport, and vh
+     leaves a dead strip the tab bar sits under. */
+  height: 100dvh;
+  background-color: var(--color-bg);
+  overflow: hidden;
+}
+
+.main {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+/**
+ * Some screens anchor a sticky action dock to the bottom of this scroller (the
+ * punch button, the export button). Without end padding, moving focus by
+ * keyboard scrolls the target just barely into view — which is to say, directly
+ * underneath that dock, where its focus ring is hidden and the control looks
+ * unreachable. The allowance covers one xl control plus its surrounding
+ * padding and hint line, which is the tallest dock any screen builds.
+ *
+ * Scoped with `:has()` so screens without a dock keep a scroll that stops
+ * exactly at the element, rather than leaving a dead band under everything.
+ */
+.main:has([data-sticky-dock]) {
+  scroll-padding-block-end: calc(var(--control-height-xl) + var(--space-11));
+}
+
+.tabbar {
+  flex: none;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  align-items: stretch;
+  z-index: var(--z-tabbar);
+  background-color: var(--color-bg-elevated);
+  border-block-start: var(--border-width) solid var(--color-border-subtle);
+  /* The inset is padding, not margin: the bar's background must reach the
+     bottom of the screen, under the gesture handle. */
+  padding-block-end: var(--safe-bottom);
+  padding-inline: max(var(--safe-left), var(--space-1)) max(var(--safe-right), var(--space-1));
+  box-shadow: var(--shadow-md);
+}
+
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.15rem;
+  min-height: var(--tabbar-height);
+  padding-block: var(--space-2);
+  color: var(--color-text-subtle);
+  text-decoration: none;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-medium);
+  letter-spacing: var(--tracking-tight);
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.tab:hover {
+  color: var(--color-text-muted);
+}
+
+.tabActive {
+  color: var(--color-accent-text);
+  font-weight: var(--weight-semibold);
+}
+
+/* A short rule above the active tab. Reads instantly in bright sun, where a
+   colour change alone can be hard to see. */
+.tabActive::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 28%;
+  height: 2px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+}
+
+.tab:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -3px;
+  border-radius: var(--radius-md);
+}
+
+.tabIcon {
+  display: inline-flex;
+}
+
+.tabLabel {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

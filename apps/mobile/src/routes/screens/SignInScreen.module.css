@@ -1,0 +1,57 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-7);
+  min-height: 100dvh;
+  max-width: var(--page-max-width);
+  margin-inline: auto;
+  padding-inline: max(var(--page-gutter), var(--safe-left), var(--safe-right));
+  padding-block: calc(var(--safe-top) + var(--space-8)) calc(var(--safe-bottom) + var(--space-6));
+  /* Centred until the on-screen keyboard shrinks the viewport, at which point
+     the content pins to the top so the submit button is never pushed off. */
+  justify-content: center;
+}
+
+@media (max-height: 34rem) {
+  .screen {
+    justify-content: flex-start;
+    gap: var(--space-5);
+    padding-block-start: calc(var(--safe-top) + var(--space-5));
+  }
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.title {
+  font-size: var(--font-size-3xl);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--color-text);
+}
+
+.subtitle {
+  font-size: var(--font-size-lg);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+  text-align: center;
+}

@@ -1,0 +1,81 @@
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  /* One measure for the whole app, centred on a large phone rather than letting
+     lines run to 430px. */
+  max-width: var(--page-max-width);
+  margin-inline: auto;
+  padding-inline: max(var(--page-gutter), var(--safe-left), var(--safe-right));
+  padding-block-end: var(--space-8);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  /* Capacitor draws under the status bar; without this the title sits behind
+     the system clock. */
+  padding-block: calc(var(--safe-top) + var(--space-6)) var(--space-5);
+}
+
+/**
+ * Title and action share a row; the subtitle sits below at full width. Putting
+ * the subtitle inside the row would let a trailing control squeeze it into a
+ * three-line column at 360px.
+ */
+.titleRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.eyebrow {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+}
+
+.title {
+  font-size: var(--font-size-3xl);
+  line-height: var(--leading-tight);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--color-text);
+}
+
+.subtitle {
+  font-size: var(--font-size-md);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+
+.action {
+  flex: none;
+  /* Optically aligns a 28px badge or 40px icon button with the title's cap
+     height rather than its line box. */
+  margin-block-start: 0.15rem;
+}
+
+.back {
+  margin-inline-start: calc(var(--space-2) * -1);
+  margin-block-start: -0.15rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  flex: 1 1 auto;
+  min-width: 0;
+}

@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+  <head>
+    <meta charset="UTF-8" />
+    <!-- viewport-fit=cover is what makes env(safe-area-inset-*) resolve to real
+         values under a translucent Android status bar / iOS notch. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="description" content="Wasel Attendance — geofenced check-in and check-out." />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#05070c" media="(prefers-color-scheme: dark)" />
+    <title>Wasel Attendance</title>
+  </head>
+  <body>
+    <script>
+      /*
+       * Applies a stored theme override before the first paint. Without it a
+       * user who chose "dark" on a light-mode phone sees one light frame on
+       * every cold start. Users on "system" need no attribute at all: the token
+       * layer's `color-scheme: light dark` already follows the OS.
+       */
+      (function () {
+        try {
+          var pref = localStorage.getItem('wasel.theme');
+          if (pref === 'light' || pref === 'dark') {
+            document.documentElement.setAttribute('data-theme', pref);
+          }
+        } catch (e) {
+          /* Storage denied — fall back to the OS preference. */
+        }
+      })();
+    </script>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

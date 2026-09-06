@@ -1,0 +1,136 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same ref makes the in-flight run obsolete; cancel it rather
+# than paying for a result nobody will read. `main` is exempt so that every commit
+# on the default branch keeps a real, attributable CI result.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.9'
+
+jobs:
+  quality:
+    name: Lint · Typecheck · Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # --frozen-lockfile makes CI fail loudly on a lockfile that drifted from
+      # package.json, instead of silently resolving different versions than the
+      # ones a developer tested against.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        run: pnpm --filter @wasel/contracts build
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Contracts tests
+        run: pnpm --filter @wasel/contracts test
+
+      - name: API unit tests
+        run: pnpm --filter @wasel/api test:unit
+
+  integration:
+    name: API integration (real PostgreSQL)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: wasel
+          POSTGRES_PASSWORD: wasel_test_password
+          POSTGRES_DB: wasel_attendance_test
+        ports:
+          - 5434:5432
+        # Without a healthcheck the job races container startup and fails
+        # intermittently on a cold runner.
+        options: >-
+          --health-cmd "pg_isready -U wasel -d wasel_attendance_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://wasel:wasel_test_password@localhost:5434/wasel_attendance_test?schema=public
+      TEST_DATABASE_URL: postgresql://wasel:wasel_test_password@localhost:5434/wasel_attendance_test?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret-value-at-least-32-chars-long
+      JWT_REFRESH_SECRET: ci-refresh-secret-value-at-least-32-chars-long
+      CORS_ORIGINS: http://localhost:5173
+      LOG_LEVEL: silent
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build contracts
+        run: pnpm --filter @wasel/contracts build
+
+      - name: Apply migrations
+        run: pnpm --filter @wasel/api db:migrate:deploy
+
+      - name: Integration tests
+        run: pnpm --filter @wasel/api test:int
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all workspaces
+        run: pnpm build

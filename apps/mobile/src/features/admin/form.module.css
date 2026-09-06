@@ -1,0 +1,81 @@
+/* Shared layout for the admin create/edit forms rendered inside a Sheet. */
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/**
+ * Two fields on one row where they are genuinely a pair (start/end times,
+ * latitude/longitude). Collapses to one column below 22rem, which is the point
+ * at which a 360px screen minus gutters can no longer hold two usable inputs.
+ */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (max-width: 22rem) {
+  .pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sectionTitle {
+  font-size: var(--font-size-2xs);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-wider);
+  text-transform: uppercase;
+  color: var(--color-text-subtle);
+  margin-block-start: var(--space-2);
+}
+
+.checkboxRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+  background-color: var(--color-bg-input);
+}
+
+.checkbox {
+  /* 1.15rem drawn; the label beside it extends the hit target to the full row,
+     so the tap area is comfortably past 44px in both axes. */
+  inline-size: 1.15rem;
+  block-size: 1.15rem;
+  margin-block-start: 0.1rem;
+  flex: none;
+  accent-color: var(--color-accent);
+}
+
+.checkboxLabel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+  cursor: pointer;
+}
+
+.checkboxTitle {
+  font-size: var(--font-size-base);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+}
+
+.checkboxHint {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+  line-height: var(--leading-normal);
+}
+
+/* A quiet, in-flow confirmation for something that just changed above it. */
+.inlineNote {
+  font-size: var(--font-size-md);
+  line-height: var(--leading-normal);
+  color: var(--color-success-text);
+  margin-block-start: calc(var(--space-2) * -1);
+}

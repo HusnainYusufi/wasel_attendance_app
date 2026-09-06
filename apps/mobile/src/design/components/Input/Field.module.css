@@ -1,0 +1,182 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.labelRow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-medium);
+  color: var(--color-text);
+  letter-spacing: var(--tracking-tight);
+}
+
+.optional {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-subtle);
+}
+
+.required {
+  color: var(--color-danger-text);
+  margin-inline-start: 0.15em;
+}
+
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background-color: var(--color-bg-input);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  padding-inline: var(--space-3);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast) var(--ease-standard);
+}
+
+.md {
+  min-height: var(--control-height-md);
+}
+
+.lg {
+  min-height: var(--control-height-lg);
+}
+
+.control:hover:not(.disabled):not(.invalid) {
+  border-color: var(--color-text-subtle);
+}
+
+/**
+ * The ring is drawn on the wrapper rather than the <input>, so a field with a
+ * leading icon and a reveal button shows one continuous ring around the whole
+ * control instead of a rectangle floating inside it.
+ */
+.control:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--color-accent);
+}
+
+.invalid {
+  border-color: var(--color-danger);
+}
+
+.invalid:focus-within {
+  border-color: var(--color-danger);
+  box-shadow: 0 0 0 var(--focus-ring-width) var(--color-danger);
+}
+
+.disabled {
+  background-color: var(--color-bg-disabled);
+  border-color: var(--color-border);
+  cursor: not-allowed;
+}
+
+.input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--color-text);
+  /* 16px minimum: below it, iOS Safari zooms the viewport on focus and never
+     zooms back out, leaving the user stranded in a magnified layout. */
+  font-size: max(1rem, var(--font-size-base));
+  line-height: var(--leading-normal);
+  padding-block: var(--space-2);
+}
+
+.input::placeholder {
+  color: var(--color-text-subtle);
+  opacity: 1;
+}
+
+.input:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+  -webkit-text-fill-color: var(--color-text-disabled);
+  opacity: 1;
+}
+
+/* The wrapper already draws a ring on :focus-within; a second one on the inner
+   input would double up. */
+.input:focus-visible {
+  outline: none;
+}
+
+.adornment {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  color: var(--color-text-subtle);
+}
+
+.trailingButton {
+  flex: none;
+  margin-inline-end: calc(var(--space-3) * -1 + var(--space-1));
+}
+
+.selectWrap {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  align-items: center;
+}
+
+.select {
+  appearance: none;
+  width: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--color-text);
+  font-size: max(1rem, var(--font-size-base));
+  padding-block: var(--space-2);
+  padding-inline-end: var(--space-6);
+  cursor: pointer;
+}
+
+.selectChevron {
+  position: absolute;
+  inset-inline-end: 0;
+  display: inline-flex;
+  pointer-events: none;
+  color: var(--color-text-subtle);
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.hint {
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-snug);
+  color: var(--color-text-subtle);
+}
+
+.error {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-snug);
+  font-weight: var(--weight-medium);
+  color: var(--color-danger-text);
+}
+
+.errorIcon {
+  flex: none;
+  margin-block-start: 0.1em;
+}

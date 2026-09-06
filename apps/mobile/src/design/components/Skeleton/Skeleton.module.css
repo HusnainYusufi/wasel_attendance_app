@@ -1,0 +1,55 @@
+.skeleton {
+  display: block;
+  background-color: var(--color-bg-skeleton);
+  border-radius: var(--radius-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.rounded {
+  border-radius: var(--radius-md);
+}
+
+.circle {
+  border-radius: var(--radius-full);
+}
+
+.text {
+  border-radius: var(--radius-xs);
+  /* Matches the cap height of body text so a skeleton line occupies exactly the
+     space the real sentence will, and nothing shifts when data lands. */
+  height: 0.75em;
+  margin-block: 0.375em;
+}
+
+/**
+ * A travelling sheen rather than a pulsing opacity: pulsing reads as "this
+ * element is disabled", travelling reads as "this element is loading".
+ */
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--color-bg-skeleton-sheen) 50%,
+    transparent 100%
+  );
+  transform: translateX(-100%);
+  animation: sheen 1.4s var(--ease-standard) infinite;
+}
+
+@keyframes sheen {
+  to {
+    transform: translateX(100%);
+  }
+}
+
+/* The global reset freezes the sheen; hide it outright so a stalled highlight
+   is not left sitting in the middle of the block. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton::after {
+    display: none;
+  }
+}

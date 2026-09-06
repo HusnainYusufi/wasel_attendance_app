@@ -1,0 +1,85 @@
+.root {
+  position: relative;
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-1);
+  padding: 0.1875rem;
+  background-color: var(--color-bg-sunken);
+  border: var(--border-width) solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  isolation: isolate;
+  /* Keeps the row ≥44px even though each option is 38px inside the padding. */
+  min-height: var(--size-tap-min);
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+/**
+ * A single travelling thumb rather than a per-option background: the slide is
+ * what tells the eye that these options are mutually exclusive. It is driven by
+ * CSS custom properties set from the selected index, so no measurement or
+ * ResizeObserver is involved.
+ */
+.thumb {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0.1875rem;
+  inset-inline-start: 0.1875rem;
+  width: calc((100% - 0.375rem - (var(--seg-gap) * (var(--seg-count) - 1))) / var(--seg-count));
+  translate: calc((100% + var(--seg-gap)) * var(--seg-index)) 0;
+  background-color: var(--color-bg-elevated);
+  border-radius: calc(var(--radius-md) - 0.1875rem);
+  box-shadow: var(--shadow-xs);
+  border: var(--border-width) solid var(--color-border-subtle);
+  transition: translate var(--duration-normal) var(--ease-emphasized);
+}
+
+.option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: calc(var(--size-tap-min) - 0.375rem);
+  padding-inline: var(--space-3);
+  border-radius: calc(var(--radius-md) - 0.1875rem);
+  font-size: var(--font-size-md);
+  font-weight: var(--weight-medium);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: color var(--duration-fast) var(--ease-standard);
+}
+
+.option:hover:not(:disabled):not(.selected) {
+  color: var(--color-text);
+}
+
+.selected {
+  color: var(--color-text);
+  font-weight: var(--weight-semibold);
+}
+
+.option:disabled {
+  color: var(--color-text-disabled);
+  cursor: not-allowed;
+}
+
+.option:focus-visible {
+  outline: var(--focus-ring-width) solid var(--color-focus-ring);
+  outline-offset: -1px;
+}
+
+.count {
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}
+
+.selected .count {
+  color: var(--color-text-muted);
+}

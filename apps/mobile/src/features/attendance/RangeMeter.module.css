@@ -1,0 +1,65 @@
+.meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.track {
+  position: relative;
+  height: 0.75rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-bg-sunken);
+  border: var(--border-width) solid var(--color-border-subtle);
+  /* The marker is drawn half outside the track; without this it is clipped to a
+     semicircle at either end of the scale. */
+  overflow: visible;
+}
+
+/* The accepted zone: from the site outward to the geofence radius. */
+.fence {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  border-start-start-radius: var(--radius-full);
+  border-end-start-radius: var(--radius-full);
+  background-color: var(--color-success-soft);
+  border-inline-end: var(--border-width-strong) solid var(--color-success);
+}
+
+.fenceOut {
+  background-color: var(--color-warning-soft);
+  border-inline-end-color: var(--color-warning);
+}
+
+/**
+ * The device. A filled dot with a ring in the surface colour, so it stays
+ * visible whether it lands on the accepted zone or the bare track — a bare dot
+ * disappears the moment it sits exactly on the fence boundary.
+ */
+.marker {
+  position: absolute;
+  inset-block-start: 50%;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: var(--radius-full);
+  translate: -50% -50%;
+  background-color: var(--color-accent);
+  box-shadow: 0 0 0 2.5px var(--color-bg-elevated);
+}
+
+.markerOut {
+  background-color: var(--color-warning-active);
+}
+
+.scale {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.scaleEnd {
+  text-align: end;
+}

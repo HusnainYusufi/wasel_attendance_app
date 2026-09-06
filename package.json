@@ -1,0 +1,30 @@
+{
+  "name": "wasel-attendance",
+  "version": "1.0.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.9",
+  "engines": {
+    "node": ">=22.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter './packages/**' build && pnpm -r --filter './apps/**' build",
+    "dev:api": "pnpm --filter @wasel/api dev",
+    "dev:mobile": "pnpm --filter @wasel/mobile dev",
+    "test": "pnpm -r test",
+    "test:api": "pnpm --filter @wasel/api test",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r typecheck",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @wasel/api db:migrate",
+    "db:seed": "pnpm --filter @wasel/api db:seed",
+    "db:studio": "pnpm --filter @wasel/api db:studio"
+  },
+  "devDependencies": {
+    "prettier": "3.4.2",
+    "typescript": "5.7.3"
+  }
+}

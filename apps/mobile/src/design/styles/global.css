@@ -1,0 +1,42 @@
+@import './tokens.css';
+@import './typography.css';
+@import './reset.css';
+
+/**
+ * App-level chrome that is not a component: the scroll container's colour
+ * behaviour and the shell background. Everything else belongs to a primitive.
+ */
+
+body {
+  /* Prevents the rubber-band overscroll area at the top of an Android WebView
+     from showing the page's white default instead of the themed background. */
+  background-color: var(--color-bg);
+}
+
+/* Native scrollbars in desktop review sessions; harmless on device. */
+@media (pointer: fine) {
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--color-border);
+    border-radius: var(--radius-full);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-border-strong);
+  }
+}
+
+/**
+ * The toast viewport is portalled to <body> and therefore cannot see the app
+ * shell's layout. This lifts it clear of the tab bar declaratively, instead of
+ * measuring the bar and writing a pixel value back into the DOM.
+ */
+:root:has([data-app-shell='tabs']) {
+  --toast-offset: calc(var(--tabbar-height) + var(--space-3));
+}

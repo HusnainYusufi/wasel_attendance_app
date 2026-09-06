@@ -1,0 +1,67 @@
+.preview {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-sunken);
+  border: var(--border-width) solid var(--color-border-subtle);
+}
+
+.figure {
+  position: relative;
+  flex: none;
+  inline-size: 5rem;
+  block-size: 5rem;
+  display: grid;
+  place-items: center;
+}
+
+/* The fence, drawn to scale against the reference marks behind it. */
+.ring {
+  position: absolute;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent-soft);
+  border: var(--border-width-strong) solid var(--color-accent);
+}
+
+.centre {
+  position: relative;
+  inline-size: 0.4rem;
+  block-size: 0.4rem;
+  border-radius: var(--radius-full);
+  background-color: var(--color-accent);
+}
+
+/* A fixed 100 m reference, so the fence circle is judged against something
+   rather than floating at an arbitrary size. */
+.reference {
+  position: absolute;
+  border-radius: var(--radius-full);
+  border: var(--border-width) dashed var(--color-border-strong);
+}
+
+.text {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.headline {
+  font-size: var(--font-size-base);
+  font-weight: var(--weight-semibold);
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.detail {
+  font-size: var(--font-size-md);
+  line-height: var(--leading-normal);
+  color: var(--color-text-muted);
+}
+
+.legend {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-subtle);
+}

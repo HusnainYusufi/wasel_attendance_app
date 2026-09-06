@@ -1,0 +1,95 @@
+.card {
+  position: relative;
+  display: block;
+  border-radius: var(--radius-lg);
+  background-color: var(--color-bg-elevated);
+  color: var(--color-text);
+  min-width: 0;
+}
+
+/**
+ * Light mode separates a card from the canvas with a shadow; dark mode cannot —
+ * a shadow on a near-black background is invisible — so it uses a hairline plus
+ * a lighter surface. Both are expressed through tokens, so the rule is one
+ * declaration, not a media query.
+ */
+.elevated {
+  box-shadow: var(--shadow-sm);
+  border: var(--border-width) solid var(--color-border-subtle);
+}
+
+.outlined {
+  border: var(--border-width) solid var(--color-border);
+}
+
+.plain {
+  background-color: transparent;
+}
+
+.accent {
+  background-color: var(--color-accent-soft);
+  border: var(--border-width) solid var(--color-accent-soft-border);
+  color: var(--color-text);
+}
+
+.padNone {
+  padding: 0;
+}
+
+.padSm {
+  padding: var(--space-3);
+}
+
+.padMd {
+  padding: var(--space-4);
+}
+
+.padLg {
+  padding: var(--space-5);
+}
+
+.interactive {
+  width: 100%;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background-color var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-fast) var(--ease-standard),
+    transform var(--duration-instant) var(--ease-standard);
+}
+
+.interactive:hover {
+  background-color: var(--color-bg-hover);
+}
+
+.interactive:active {
+  transform: scale(0.99);
+  background-color: var(--color-bg-active);
+}
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-block-end: var(--space-3);
+}
+
+.headerText {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--font-size-lg);
+  font-weight: var(--weight-semibold);
+  letter-spacing: var(--tracking-tight);
+  color: var(--color-text);
+}
+
+.subtitle {
+  font-size: var(--font-size-md);
+  color: var(--color-text-muted);
+}

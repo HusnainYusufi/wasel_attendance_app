@@ -1,0 +1,30 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "outDir": "./dist",
+    "baseUrl": ".",
+    "types": ["node"],
+    // NestJS is built on the legacy (TC39 stage-2) decorator proposal; the
+    // standard decorators emitted by `useDefineForClassFields` break its DI
+    // metadata, so both flags are pinned rather than left to target defaults.
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "strictPropertyInitialization": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "incremental": true,
+    "tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo"
+  },
+  "include": [
+    "src/**/*.ts",
+    "test/**/*.ts",
+    "vitest.config.ts",
+    "prisma.config.ts",
+    "prisma/seed.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

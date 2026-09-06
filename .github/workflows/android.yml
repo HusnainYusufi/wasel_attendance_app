@@ -1,0 +1,232 @@
+name: Android APK
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: 'API base URL to bake into the build'
+        required: false
+        default: ''
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  NODE_VERSION: '22'
+  PNPM_VERSION: '9.15.9'
+  JAVA_VERSION: '21'
+
+jobs:
+  apk:
+    name: Build APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: write # required to attach the APK to a GitHub Release on a tag
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ---------------------------------------------------------------------
+      # Derive version identifiers.
+      # versionCode must increase monotonically for Play to accept an upload;
+      # run_number gives that for free and never regresses. versionName is the
+      # tag when tagged, otherwise a traceable short SHA build.
+      # ---------------------------------------------------------------------
+      - name: Compute version
+        id: version
+        run: |
+          set -euo pipefail
+          VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          else
+            VERSION_NAME="0.0.0-${GITHUB_SHA::7}"
+          fi
+          echo "code=${VERSION_CODE}" >> "$GITHUB_OUTPUT"
+          echo "name=${VERSION_NAME}" >> "$GITHUB_OUTPUT"
+          echo "Building versionCode=${VERSION_CODE} versionName=${VERSION_NAME}"
+
+      - name: Build web assets
+        env:
+          # Baked in at build time. Configure the repository variable
+          # VITE_API_BASE_URL (Settings → Secrets and variables → Actions → Variables);
+          # a manual run can override it via the workflow input.
+          VITE_API_BASE_URL: ${{ github.event.inputs.api_base_url || vars.VITE_API_BASE_URL }}
+        run: |
+          set -euo pipefail
+          if [ -z "${VITE_API_BASE_URL}" ]; then
+            # A tagged build is a release: shipping one that points at localhost
+            # would fail on every device, so refuse rather than publish it.
+            if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+              echo "::error::VITE_API_BASE_URL is required for a tagged release build."
+              echo "::error::Set the repository variable (Settings → Secrets and variables → Actions → Variables)."
+              exit 1
+            fi
+            # An untagged build is for trying the app out. Let it through so there
+            # is something installable to look at, but make the limitation loud —
+            # a silent localhost APK that mysteriously cannot sign in is worse
+            # than one whose build log says exactly why.
+            echo "::warning::VITE_API_BASE_URL is not set — building a PREVIEW APK."
+            echo "::warning::Every screen renders, but sign-in cannot work: the app has no backend to call."
+            echo "::warning::Set the repository variable VITE_API_BASE_URL and re-run for a working APK."
+            echo "PREVIEW_BUILD=true" >> "$GITHUB_ENV"
+          fi
+          pnpm --filter @wasel/contracts build
+          pnpm --filter @wasel/mobile build
+
+      # The android/ directory is generated, not committed — it is a build
+      # artifact of the web assets plus capacitor.config.ts.
+      - name: Generate Android project
+        working-directory: apps/mobile
+        run: |
+          set -euo pipefail
+          if [ ! -d android ]; then
+            pnpm exec cap add android
+          fi
+          pnpm exec cap sync android
+
+      - name: Apply version to Gradle
+        working-directory: apps/mobile/android/app
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          set -euo pipefail
+          sed -i -E "s/versionCode [0-9]+/versionCode ${VERSION_CODE}/" build.gradle
+          sed -i -E "s/versionName \"[^\"]*\"/versionName \"${VERSION_NAME}\"/" build.gradle
+          grep -E 'versionCode|versionName' build.gradle
+
+      - name: Build debug APK
+        working-directory: apps/mobile/android
+        run: |
+          set -euo pipefail
+          chmod +x ./gradlew
+          ./gradlew --no-daemon assembleDebug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasel-attendance-debug-${{ steps.version.outputs.name }}
+          path: apps/mobile/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          {
+            echo "## Android APK"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| Version | \`${{ steps.version.outputs.name }}\` (code ${{ steps.version.outputs.code }}) |"
+            if [ "${PREVIEW_BUILD:-false}" = "true" ]; then
+              echo "| API | **not configured — preview build** |"
+            else
+              echo "| API | configured |"
+            fi
+            echo
+            echo "Download **wasel-attendance-debug-${{ steps.version.outputs.name }}** from the Artifacts section below,"
+            echo "unzip it, and open \`app-debug.apk\` on your Android phone."
+            echo "You will need to allow *Install unknown apps* for whichever app opens it."
+            if [ "${PREVIEW_BUILD:-false}" = "true" ]; then
+              echo
+              echo "> **Preview build.** Every screen renders, but signing in cannot work — no backend is configured yet."
+              echo "> Deploy the API, set the repository variable \`VITE_API_BASE_URL\` to its base URL, and re-run this workflow."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # ---------------------------------------------------------------------
+      # Signed release build.
+      #
+      # Signing happens with apksigner against the unsigned Gradle output rather
+      # than by injecting a signingConfig into build.gradle. The Android project
+      # is regenerated on every run, so a patched Gradle file would have to be
+      # re-patched each time — and a patch that silently fails to apply would
+      # produce an unsigned APK that still *looks* like a successful build.
+      # ---------------------------------------------------------------------
+      - name: Check signing secrets
+        id: signing
+        run: |
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::ANDROID_KEYSTORE_BASE64 not set — skipping the signed release APK."
+            echo "::notice::The debug APK above installs fine for testing; a signed release APK is"
+            echo "::notice::required for Play Store distribution. See docs/DEPLOYMENT.md."
+          fi
+
+      - name: Build release APK
+        if: steps.signing.outputs.available == 'true'
+        working-directory: apps/mobile/android
+        run: ./gradlew --no-daemon assembleRelease
+
+      - name: Sign release APK
+        if: steps.signing.outputs.available == 'true'
+        working-directory: apps/mobile/android/app/build/outputs/apk/release
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "${KEYSTORE_B64}" | base64 -d > "${RUNNER_TEMP}/release.jks"
+
+          BUILD_TOOLS="$(ls -d "${ANDROID_HOME}"/build-tools/* | sort -V | tail -1)"
+          echo "Using build-tools: ${BUILD_TOOLS}"
+
+          "${BUILD_TOOLS}/zipalign" -p -f 4 app-release-unsigned.apk app-release-aligned.apk
+          "${BUILD_TOOLS}/apksigner" sign \
+            --ks "${RUNNER_TEMP}/release.jks" \
+            --ks-pass "pass:${KEYSTORE_PASSWORD}" \
+            --ks-key-alias "${KEY_ALIAS}" \
+            --key-pass "pass:${KEY_PASSWORD}" \
+            --out wasel-attendance-release.apk \
+            app-release-aligned.apk
+
+          # Fail the build if the signature does not actually verify, rather than
+          # publishing an APK that devices will refuse to install.
+          "${BUILD_TOOLS}/apksigner" verify --verbose wasel-attendance-release.apk
+
+          rm -f "${RUNNER_TEMP}/release.jks" app-release-aligned.apk
+
+      - name: Upload release APK
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: wasel-attendance-release-${{ steps.version.outputs.name }}
+          path: apps/mobile/android/app/build/outputs/apk/release/wasel-attendance-release.apk
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Attach APK to release
+        if: startsWith(github.ref, 'refs/tags/') && steps.signing.outputs.available == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/mobile/android/app/build/outputs/apk/release/wasel-attendance-release.apk
+          generate_release_notes: true

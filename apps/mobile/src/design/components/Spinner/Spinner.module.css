@@ -1,0 +1,27 @@
+.spinner {
+  display: inline-block;
+  flex: none;
+  color: currentcolor;
+  animation: rotate 1s linear infinite;
+}
+
+.track {
+  opacity: 0.22;
+}
+
+.head {
+  /* 25% of the circumference (2πr, r = 9) leaves a quarter-arc chasing the
+     circle — long enough to read as motion, short enough not to look like a
+     stalled ring. */
+  stroke-dasharray: 14.14 42.41;
+  stroke-linecap: round;
+}
+
+@keyframes rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* The global reset collapses this animation to a single frame under
+   prefers-reduced-motion; a static three-quarter ring still reads as "busy". */

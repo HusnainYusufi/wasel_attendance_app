@@ -1,0 +1,267 @@
+/**
+ * Design tokens — the only place a raw colour, radius, duration or z-index is
+ * allowed to appear. Components consume the semantic layer, never the palette.
+ *
+ * Theming uses CSS `light-dark()` rather than a duplicated dark-mode block:
+ * one declaration per token, resolved against the element's `color-scheme`.
+ * `:root` declares `color-scheme: light dark`, so the OS preference wins by
+ * default; ThemeProvider narrows it to a single scheme when the user overrides.
+ * Baseline: Chrome/WebView 123, Safari 17.5, Firefox 120.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ---------------------------------------------------------------------
+   * Palette — raw ramps, generated in OKLCH at even perceptual steps so the
+   * hue stays constant as lightness moves. Never referenced from a component.
+   * ------------------------------------------------------------------- */
+
+  /* Brand: a royal indigo-blue. Deliberately not green or red — those hues are
+     reserved for check-in / check-out semantics and must never read as "brand". */
+  --palette-brand-50: #f1f6ff;
+  --palette-brand-100: #e0ebff;
+  --palette-brand-200: #c5d9ff;
+  --palette-brand-300: #a1c1ff;
+  --palette-brand-400: #75a2ff;
+  --palette-brand-500: #4e83fe;
+  --palette-brand-600: #3266e5;
+  --palette-brand-700: #2653c0;
+  --palette-brand-800: #1f4297;
+  --palette-brand-900: #19336f;
+  --palette-brand-925: #1a2c53;
+  --palette-brand-950: #12203f;
+
+  /* Neutrals carry a trace of the brand hue (chroma ≤ 0.019) so greys sit in the
+     same family as the accent instead of looking like a second, colder palette. */
+  --palette-neutral-0: #ffffff;
+  --palette-neutral-25: #fbfcfd;
+  --palette-neutral-50: #f6f7fa;
+  --palette-neutral-100: #eef0f4;
+  --palette-neutral-200: #e1e4e9;
+  --palette-neutral-300: #d0d4da;
+  --palette-neutral-400: #acb1ba;
+  --palette-neutral-500: #8a8f99;
+  --palette-neutral-600: #696e79;
+  --palette-neutral-700: #505661;
+  --palette-neutral-800: #3a3f4a;
+  --palette-neutral-850: #2b303a;
+  --palette-neutral-900: #1e232b;
+  --palette-neutral-950: #11151d;
+  --palette-neutral-975: #0a0d13;
+  --palette-neutral-1000: #05070c;
+
+  --palette-success-50: #e8f9eb;
+  --palette-success-100: #ccf1d5;
+  --palette-success-200: #a5e3b4;
+  --palette-success-300: #6fc889;
+  --palette-success-400: #43b46b;
+  --palette-success-500: #2a9a56;
+  --palette-success-600: #1f7e44;
+  --palette-success-700: #196536;
+  --palette-success-800: #164f2b;
+  --palette-success-900: #103c20;
+  --palette-success-950: #0b2815;
+
+  --palette-warning-50: #fff3e0;
+  --palette-warning-100: #ffe8bf;
+  --palette-warning-200: #ffd288;
+  --palette-warning-300: #ffbd4b;
+  --palette-warning-400: #f6aa21;
+  --palette-warning-500: #d99306;
+  --palette-warning-600: #b47905;
+  --palette-warning-700: #91620a;
+  --palette-warning-800: #724d0b;
+  --palette-warning-900: #5a3c0b;
+  --palette-warning-950: #2e1d03;
+
+  --palette-danger-50: #fff1ef;
+  --palette-danger-100: #ffe2de;
+  --palette-danger-200: #ffc9c4;
+  --palette-danger-300: #faa69f;
+  --palette-danger-400: #f57a73;
+  --palette-danger-500: #eb4d4c;
+  --palette-danger-600: #d02830;
+  --palette-danger-700: #ad2026;
+  --palette-danger-800: #8a1e20;
+  --palette-danger-900: #6b1a1a;
+  --palette-danger-950: #381412;
+
+  /* ---------------------------------------------------------------------
+   * Semantic colour — what components actually use.
+   * Every text/background pair below is verified ≥ 4.5:1 (body) or ≥ 3:1
+   * (large text, control boundaries, focus rings) in BOTH schemes.
+   * ------------------------------------------------------------------- */
+
+  /* Surfaces */
+  --color-bg: light-dark(var(--palette-neutral-50), var(--palette-neutral-1000));
+  --color-bg-elevated: light-dark(var(--palette-neutral-0), var(--palette-neutral-950));
+  --color-bg-raised: light-dark(var(--palette-neutral-0), var(--palette-neutral-900));
+  --color-bg-sunken: light-dark(var(--palette-neutral-100), var(--palette-neutral-975));
+  --color-bg-hover: light-dark(var(--palette-neutral-100), var(--palette-neutral-900));
+  --color-bg-active: light-dark(var(--palette-neutral-200), var(--palette-neutral-850));
+  --color-bg-input: light-dark(var(--palette-neutral-0), var(--palette-neutral-950));
+  --color-bg-disabled: light-dark(var(--palette-neutral-100), var(--palette-neutral-900));
+  --color-bg-skeleton: light-dark(var(--palette-neutral-200), var(--palette-neutral-850));
+  --color-bg-skeleton-sheen: light-dark(var(--palette-neutral-100), var(--palette-neutral-800));
+
+  /* Text — contrast on --color-bg / --color-bg-elevated:
+     text 15.8/14.7 · muted 7.4/6.9 · subtle 5.1/4.8 (light)
+     text 18.8/17.1 · muted 9.4/8.5 · subtle 5.6/5.6 (dark) */
+  --color-text: light-dark(var(--palette-neutral-900), var(--palette-neutral-50));
+  --color-text-muted: light-dark(var(--palette-neutral-700), var(--palette-neutral-400));
+  --color-text-subtle: light-dark(var(--palette-neutral-600), var(--palette-neutral-500));
+  --color-text-disabled: light-dark(var(--palette-neutral-400), var(--palette-neutral-600));
+  --color-text-inverse: light-dark(var(--palette-neutral-0), var(--palette-neutral-1000));
+
+  /* Borders. `--color-border-strong` is the one that bounds a control, so it is
+     held to the 3:1 non-text contrast minimum (3.25 light / 3.58 dark). */
+  --color-border-subtle: light-dark(var(--palette-neutral-200), var(--palette-neutral-850));
+  --color-border: light-dark(var(--palette-neutral-300), var(--palette-neutral-800));
+  --color-border-strong: light-dark(var(--palette-neutral-500), var(--palette-neutral-600));
+
+  /* Accent — light mode fills dark-on-white, dark mode fills light-on-black.
+     White on brand-600 = 5.04:1; near-black on brand-400 = 8.03:1. */
+  --color-accent: light-dark(var(--palette-brand-600), var(--palette-brand-400));
+  --color-accent-hover: light-dark(var(--palette-brand-700), var(--palette-brand-300));
+  --color-accent-active: light-dark(var(--palette-brand-800), var(--palette-brand-500));
+  --color-accent-fg: light-dark(var(--palette-neutral-0), var(--palette-neutral-1000));
+  --color-accent-text: light-dark(var(--palette-brand-700), var(--palette-brand-300));
+  --color-accent-soft: light-dark(var(--palette-brand-50), var(--palette-brand-950));
+  --color-accent-soft-hover: light-dark(var(--palette-brand-100), var(--palette-brand-925));
+  --color-accent-soft-fg: light-dark(var(--palette-brand-800), var(--palette-brand-200));
+  --color-accent-soft-border: light-dark(var(--palette-brand-200), var(--palette-brand-925));
+
+  --color-success: light-dark(var(--palette-success-600), var(--palette-success-400));
+  --color-success-hover: light-dark(var(--palette-success-700), var(--palette-success-300));
+  --color-success-active: light-dark(var(--palette-success-800), var(--palette-success-500));
+  --color-success-fg: light-dark(var(--palette-neutral-0), var(--palette-neutral-1000));
+  --color-success-text: light-dark(var(--palette-success-700), var(--palette-success-300));
+  --color-success-soft: light-dark(var(--palette-success-50), var(--palette-success-950));
+  --color-success-soft-fg: light-dark(var(--palette-success-800), var(--palette-success-200));
+  --color-success-soft-border: light-dark(var(--palette-success-200), var(--palette-success-900));
+
+  /* Warning is the one semantic that reads wrong as a dark fill: pushed dark
+     enough for white text it turns brown and stops meaning "caution". It keeps
+     its amber and takes near-black text instead — 8.03:1 light, 10.26:1 dark. */
+  --color-warning: var(--palette-warning-400);
+  --color-warning-hover: light-dark(var(--palette-warning-500), var(--palette-warning-300));
+  --color-warning-active: light-dark(var(--palette-warning-600), var(--palette-warning-500));
+  --color-warning-fg: light-dark(var(--palette-neutral-900), var(--palette-neutral-1000));
+  --color-warning-text: light-dark(var(--palette-warning-800), var(--palette-warning-300));
+  --color-warning-soft: light-dark(var(--palette-warning-50), var(--palette-warning-950));
+  --color-warning-soft-fg: light-dark(var(--palette-warning-800), var(--palette-warning-200));
+  --color-warning-soft-border: light-dark(var(--palette-warning-200), var(--palette-warning-900));
+
+  --color-danger: light-dark(var(--palette-danger-600), var(--palette-danger-400));
+  --color-danger-hover: light-dark(var(--palette-danger-700), var(--palette-danger-300));
+  --color-danger-active: light-dark(var(--palette-danger-800), var(--palette-danger-500));
+  --color-danger-fg: light-dark(var(--palette-neutral-0), var(--palette-neutral-1000));
+  --color-danger-text: light-dark(var(--palette-danger-700), var(--palette-danger-300));
+  --color-danger-soft: light-dark(var(--palette-danger-50), var(--palette-danger-950));
+  --color-danger-soft-fg: light-dark(var(--palette-danger-800), var(--palette-danger-200));
+  --color-danger-soft-border: light-dark(var(--palette-danger-200), var(--palette-danger-900));
+
+  --color-focus-ring: light-dark(var(--palette-brand-600), var(--palette-brand-400));
+  --color-focus-ring-offset: var(--color-bg-elevated);
+  --color-overlay: light-dark(rgb(15 18 24 / 0.44), rgb(0 0 0 / 0.66));
+
+  /* ---------------------------------------------------------------------
+   * Elevation. Two-part shadows (a tight contact shadow plus a wide ambient
+   * one) read as physical; a single blurred box does not. Dark mode leans on
+   * surface lightness for hierarchy and only uses shadow for true overlays.
+   * ------------------------------------------------------------------- */
+  --shadow-contact: light-dark(rgb(23 27 34 / 0.06), rgb(0 0 0 / 0.5));
+  --shadow-ambient: light-dark(rgb(23 27 34 / 0.08), rgb(0 0 0 / 0.44));
+  --shadow-xs: 0 1px 1px var(--shadow-contact);
+  --shadow-sm: 0 1px 2px var(--shadow-contact), 0 2px 6px -2px var(--shadow-ambient);
+  --shadow-md: 0 1px 2px var(--shadow-contact), 0 6px 16px -4px var(--shadow-ambient);
+  --shadow-lg: 0 2px 4px var(--shadow-contact), 0 16px 32px -8px var(--shadow-ambient);
+  --shadow-xl: 0 4px 8px var(--shadow-contact), 0 32px 56px -12px var(--shadow-ambient);
+
+  /* ---------------------------------------------------------------------
+   * Space — a 4px base with a deliberate jump after 24px. Layout gaps come
+   * from here so vertical rhythm is shared across screens.
+   * ------------------------------------------------------------------- */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.5rem;
+  --space-9: 3rem;
+  --space-10: 4rem;
+  --space-11: 5rem;
+  --space-12: 6rem;
+
+  /* Horizontal page gutter. Tight enough that a 360px screen still gets a
+     comfortable measure, generous enough not to feel like a web page. */
+  --page-gutter: var(--space-5);
+  --page-max-width: 34rem;
+
+  /* Radii */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.625rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.75rem;
+  --radius-full: 999rem;
+
+  /* Control sizing. 44px is the minimum comfortable thumb target; smaller
+     controls keep their visual size but expand their hit area via ::after. */
+  --size-tap-min: 2.75rem;
+  --control-height-sm: 2.25rem;
+  --control-height-md: 2.75rem;
+  --control-height-lg: 3.25rem;
+  --control-height-xl: 4rem;
+  --tabbar-height: 3.75rem;
+  --appbar-height: 3.25rem;
+  /* Raised by the app shell when a tab bar is present, so a toast never lands
+     under the navigation. */
+  --toast-offset: var(--space-4);
+  --border-width: 1px;
+  --border-width-strong: 1.5px;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
+
+  /* Motion. One standard curve does almost all the work; `emphasized` is for
+     things that travel a long way (sheets), `exit` for things leaving. */
+  --duration-instant: 80ms;
+  --duration-fast: 140ms;
+  --duration-normal: 220ms;
+  --duration-slow: 340ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --ease-exit: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Stacking order, declared once so no component invents a magic 9999. */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-tabbar: 20;
+  --z-appbar: 25;
+  --z-overlay: 100;
+  --z-sheet: 110;
+  --z-toast: 200;
+
+  /* Safe areas. Capacitor draws under the status bar, so every edge-anchored
+     surface adds the corresponding inset rather than assuming zero. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+}
+
+/* Manual override: narrowing `color-scheme` re-resolves every `light-dark()`
+   token above, plus native form controls, scrollbars and caret colour. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}

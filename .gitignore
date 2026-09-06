@@ -1,0 +1,55 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Test / coverage
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Capacitor / Android
+apps/mobile/android/
+apps/mobile/ios/
+apps/mobile/dist/
+*.apk
+*.aab
+*.keystore
+!debug.keystore
+local.properties
+.gradle/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Misc
+.cache/
+.turbo/
+
+# Playwright MCP scratch output
+.playwright-mcp/
+*.png.tmp

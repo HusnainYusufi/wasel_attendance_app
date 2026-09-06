@@ -1,0 +1,320 @@
+// Wasel Attendance — data model
+//
+// Design notes:
+//  * Every tenant-owned row carries `organizationId`. Queries and guards scope on it,
+//    which structurally prevents cross-tenant IDOR rather than relying on discipline.
+//  * Instants are stored as `timestamptz` (UTC). Calendar days are stored as `date` and
+//    are always computed in the *organization's* IANA timezone, never the server's.
+//  * `AttendanceRecord` is the queryable per-day projection (one row per user per work
+//    date, enforced by a unique index — this is what makes double-tap check-in safe).
+//  * `AttendanceEvent` is an append-only log of every punch *attempt*, including the
+//    rejected ones. Rejections are the interesting rows for an auditor: a record that
+//    only stores successes cannot answer "did anyone try to punch in from home?".
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// Outcome of a punch attempt. Rejections are persisted, never silently dropped.
+enum PunchOutcome {
+  ACCEPTED
+  REJECTED_OUT_OF_RANGE
+  REJECTED_NO_ACTIVE_SITE
+  REJECTED_ALREADY_CHECKED_IN
+  REJECTED_NOT_CHECKED_IN
+  REJECTED_ALREADY_CHECKED_OUT
+  REJECTED_LOW_ACCURACY
+  REJECTED_ACCOUNT_SUSPENDED
+  REJECTED_SHIFT_STILL_OPEN
+  REJECTED_SHIFT_TOO_SHORT
+}
+
+enum PunchType {
+  CHECK_IN
+  CHECK_OUT
+}
+
+/// Derived per-day state. Computed from punches + organization workday policy.
+enum AttendanceStatus {
+  PRESENT
+  LATE
+  INCOMPLETE
+}
+
+// ---------------------------------------------------------------------------
+// Tenancy
+// ---------------------------------------------------------------------------
+
+model Organization {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @db.VarChar(120)
+  slug      String   @unique @db.VarChar(64)
+
+  /// IANA timezone (e.g. "Asia/Riyadh"). Authoritative for every workDate boundary.
+  timezone  String   @default("UTC") @db.VarChar(64)
+
+  // --- Workday policy ---------------------------------------------------
+  /// Local wall-clock start of the workday, "HH:mm". Drives LATE classification.
+  workdayStart      String @default("09:00") @db.VarChar(5)
+  /// Local wall-clock end of the workday, "HH:mm". Used for reporting only.
+  workdayEnd        String @default("17:00") @db.VarChar(5)
+  /// Local wall-clock time at which the *business day* rolls over, "HH:mm".
+  ///
+  /// This is the boundary `workDate` is cut on, and it is not the same question
+  /// as when work starts. A 23:00–07:00 tenant needs its day to roll over in the
+  /// afternoon, so that a shift beginning at 23:00 and a punch at 02:00 land on
+  /// one date and are measured against one `workdayStart`. Defaulting to
+  /// midnight reproduces the pre-existing local-midnight-to-local-midnight
+  /// behaviour exactly, so no stored row changes meaning.
+  dayStartsAt       String @default("00:00") @db.VarChar(5)
+  /// Minutes after workdayStart before a check-in is classified LATE.
+  lateGraceMinutes  Int    @default(15)
+  /// Reject punches whose GPS accuracy radius exceeds this, in metres.
+  /// A 2 km accuracy fix "inside" a 150 m geofence proves nothing.
+  maxAccuracyMeters Int    @default(100)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  users             User[]
+  sites             Site[]
+  attendanceRecords AttendanceRecord[]
+  attendanceEvents  AttendanceEvent[]
+  auditLogs         AuditLog[]
+
+  @@map("organizations")
+}
+
+// ---------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------
+
+model User {
+  id             String     @id @default(uuid()) @db.Uuid
+  organizationId String     @db.Uuid
+
+  /// Stored lowercased+trimmed. Unique per organization, not globally: the same
+  /// human may legitimately exist in two tenants.
+  email        String     @db.VarChar(255)
+  passwordHash String     @db.VarChar(255)
+  fullName     String     @db.VarChar(120)
+  employeeCode String?    @db.VarChar(32)
+  role         Role       @default(MEMBER)
+  status       UserStatus @default(ACTIVE)
+
+  /// Bumped on password change / forced logout. Access tokens carrying a lower
+  /// value are rejected, which makes revocation work without a token blocklist.
+  tokenVersion Int @default(0)
+
+  lastLoginAt         DateTime? @db.Timestamptz(3)
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  /// Soft delete. Attendance history must survive an employee leaving.
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sessions          Session[]
+  attendanceRecords AttendanceRecord[]
+  attendanceEvents  AttendanceEvent[]
+  auditLogs         AuditLog[]
+
+  @@unique([organizationId, email])
+  @@unique([organizationId, employeeCode])
+  @@index([organizationId, status])
+  @@map("users")
+}
+
+/// One row per refresh-token issuance. Rotation replaces the row; reuse of a
+/// consumed token revokes the whole family (stolen-token detection).
+model Session {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @db.Uuid
+
+  /// SHA-256 of the refresh token. The raw token is never stored.
+  tokenHash String @unique @db.VarChar(64)
+  /// Shared across a rotation chain so reuse can revoke every descendant.
+  familyId  String @db.Uuid
+
+  userAgent String? @db.VarChar(512)
+  ipAddress String? @db.VarChar(45)
+
+  expiresAt DateTime  @db.Timestamptz(3)
+  revokedAt DateTime? @db.Timestamptz(3)
+  /// Set when this token is exchanged. A second exchange is a reuse attack.
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+// ---------------------------------------------------------------------------
+// Geofencing
+// ---------------------------------------------------------------------------
+
+model Site {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+
+  name         String  @db.VarChar(120)
+  address      String? @db.VarChar(255)
+  latitude     Float
+  longitude    Float
+  /// Geofence radius in metres.
+  radiusMeters Int     @default(150)
+  isActive     Boolean @default(true)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  checkInRecords    AttendanceRecord[] @relation("CheckInSite")
+  checkOutRecords   AttendanceRecord[] @relation("CheckOutSite")
+  attendanceEvents  AttendanceEvent[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, isActive])
+  @@map("sites")
+}
+
+// ---------------------------------------------------------------------------
+// Attendance
+// ---------------------------------------------------------------------------
+
+/// Per-user, per-day projection. The unique index on (userId, workDate) is the
+/// concurrency guard: two simultaneous check-ins collide at the database, not in
+/// application logic.
+model AttendanceRecord {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId         String @db.Uuid
+
+  /// Local calendar date in the organization's timezone.
+  workDate DateTime @db.Date
+
+  checkInAt          DateTime @db.Timestamptz(3)
+  checkInSiteId      String   @db.Uuid
+  checkInLatitude    Float
+  checkInLongitude   Float
+  checkInAccuracyM   Float
+  checkInDistanceM   Float
+
+  checkOutAt         DateTime? @db.Timestamptz(3)
+  checkOutSiteId     String?   @db.Uuid
+  checkOutLatitude   Float?
+  checkOutLongitude  Float?
+  checkOutAccuracyM  Float?
+  checkOutDistanceM  Float?
+
+  status       AttendanceStatus @default(PRESENT)
+  /// Whole minutes between check-in and check-out. Null until checked out.
+  workedMinutes Int?
+  /// Minutes past (workdayStart + grace). 0 when on time.
+  lateMinutes   Int              @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  checkInSite  Site         @relation("CheckInSite", fields: [checkInSiteId], references: [id])
+  checkOutSite Site?        @relation("CheckOutSite", fields: [checkOutSiteId], references: [id])
+
+  @@unique([userId, workDate])
+  // Widened from (organizationId, workDate) to cover the export's keyset order.
+  // The report pages with `(workDate, userId) > (lastDate, lastUser)`, so without
+  // `userId` in the index Postgres re-sorts every day's rows on each batch — 81.8M
+  // index tuples touched to return 146k rows in a measured year-long export. The
+  // two-column form is a prefix of this one, so nothing that used it regresses.
+  @@index([organizationId, workDate, userId])
+  @@index([userId, workDate(sort: Desc)])
+  @@map("attendance_records")
+}
+
+/// Append-only audit of every punch attempt, accepted or rejected.
+model AttendanceEvent {
+  id             String @id @default(uuid()) @db.Uuid
+  organizationId String @db.Uuid
+  userId         String @db.Uuid
+
+  type      PunchType
+  outcome   PunchOutcome
+  workDate  DateTime     @db.Date
+
+  latitude   Float
+  longitude  Float
+  accuracyM  Float
+  /// Distance to the nearest active site, metres. Null when the org has no sites.
+  distanceM  Float?
+  siteId     String? @db.Uuid
+
+  /// Client-supplied device timestamp, for detecting clock tampering. Never trusted
+  /// for workDate computation — the server clock is authoritative.
+  deviceTime DateTime? @db.Timestamptz(3)
+  ipAddress  String?   @db.VarChar(45)
+  userAgent  String?   @db.VarChar(512)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site         Site?        @relation(fields: [siteId], references: [id])
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([organizationId, outcome])
+  @@map("attendance_events")
+}
+
+// ---------------------------------------------------------------------------
+// Audit
+// ---------------------------------------------------------------------------
+
+model AuditLog {
+  id             String  @id @default(uuid()) @db.Uuid
+  organizationId String  @db.Uuid
+  /// Null for system-originated actions.
+  actorId        String? @db.Uuid
+
+  action     String  @db.VarChar(64)
+  entityType String  @db.VarChar(64)
+  entityId   String? @db.VarChar(64)
+  metadata   Json?
+  ipAddress  String? @db.VarChar(45)
+  userAgent  String? @db.VarChar(512)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?        @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt(sort: Desc)])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}

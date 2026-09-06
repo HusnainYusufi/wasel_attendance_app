@@ -1,0 +1,64 @@
+/**
+ * Two columns at every width the app supports.
+ *
+ * `minmax(0, 1fr)` rather than `1fr`: a grid track's default minimum is
+ * `auto`, so one long number would widen its column and push the other off a
+ * 360px screen instead of wrapping inside it.
+ */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+@media (min-width: 30rem) {
+  .grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.value {
+  font-size: var(--font-size-3xl);
+  line-height: var(--leading-none);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-tighter);
+  color: var(--color-text);
+  /* Tabular figures keep the six tiles' numbers on a shared optical grid, so a
+     column of counts reads as a column rather than as ragged text. */
+  font-variant-numeric: tabular-nums;
+}
+
+.label {
+  font-size: var(--font-size-sm);
+  line-height: var(--leading-snug);
+  color: var(--color-text-muted);
+}
+
+.hint {
+  font-size: var(--font-size-xs);
+  line-height: var(--leading-snug);
+  color: var(--color-text-subtle);
+}
+
+.accent .value {
+  color: var(--color-accent-text);
+}
+
+.success .value {
+  color: var(--color-success-text);
+}
+
+.warning .value {
+  color: var(--color-warning-text);
+}
+
+.danger .value {
+  color: var(--color-danger-text);
+}
